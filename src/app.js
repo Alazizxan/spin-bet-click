@@ -232,12 +232,13 @@ bot.on('text', async (msg) => {
 
                 console.log('SMS verification response:', verifyResponse.data);
 
-                const paymentPayload = {
+                const paymentPayload = { 
                     service_id: parseInt(CLICK_API.SERVICE_ID, 10),
                     card_token: userData.cardToken,
-                    amount: userData.amount.toString(),
-                    transaction_parameter: Date.now()
+                    amount: parseFloat(userData.amount), // amount ni float ga aylantirish
+                    transaction_parameter: Date.now().toString() // transaction_parameter ni string ga aylantirish
                 };
+                
 
                 console.log('Payment request payload:', paymentPayload);
 
