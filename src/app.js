@@ -169,11 +169,13 @@ app.post('/api/payments/Complete', async (req, res, next) => {
         const merchant_trans_id = generateMerchantTransId();
 
         // Create payload
+        let transactionCounter = 0;
+
         const payload = {
             service_id: CLICK_API.SERVICE_ID,
             card_token: card_token,
-            amount: parseFloat(amount).toFixed(2), // Ikkita o'nlik qoldiq bilan formatlash
-            transaction_parameter: merchant_trans_id
+            amount: amount.toString(), // Floatni stringga aylantirish
+            transaction_parameter: ++transactionCounter // Har safar unik int o'sadi
         };
         
 
