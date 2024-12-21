@@ -172,7 +172,7 @@ app.post('/api/payments/Complete', async (req, res, next) => {
         let transactionCounter = 0;
 
         const payload = {
-            service_id: CLICK_API.SERVICE_ID,
+            service_id: parseInt(CLICK_API.SERVICE_ID, 10),
             card_token: card_token,
             amount: amount.toString(), // Floatni stringga aylantirish
             transaction_parameter: ++transactionCounter // Har safar unik int o'sadi
