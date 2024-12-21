@@ -89,7 +89,7 @@ const validateCardTokenRequest = (req, res, next) => {
 // Routes
 
 // 1. Create card token
-app.post('/api/payments/card-token', validateCardTokenRequest, async (req, res, next) => {
+app.post('/api/payments/Prepare', validateCardTokenRequest, async (req, res, next) => {
     try {
         const { card_number, expire_date, temporary } = req.body;
         
@@ -145,7 +145,7 @@ function generateMerchantTransId() {
 }
 
 // API endpoint
-app.post('/api/payments/process', async (req, res, next) => {
+app.post('/api/payments/Complete', async (req, res, next) => {
     try {
         const { card_token, amount } = req.body;
 
