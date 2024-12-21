@@ -189,6 +189,7 @@ bot.on('text', async (msg) => {
                     amount: userData.amount.toString(),
                     transaction_parameter: Date.now()
                 });
+                console.log('Full Payment Response:', JSON.stringify(paymentResponse.data, null, 2));
 
                 if (paymentResponse.data.error_code === 0) {
                     bot.sendMessage(chatId, `✅ To'lov muvaffaqiyatli amalga oshirildi!\n\nSumma: ${userData.amount} UZS\nID: ${userData.spinId}`);
