@@ -96,7 +96,7 @@ app.post('/api/payments/Prepare', validateCardTokenRequest, async (req, res, nex
         const response = await createAxiosInstance().post(
             '/card_token/request',
             {
-                service_id: CLICK_API.SERVICE_ID,
+                service_id: parseInt(CLICK_API.SERVICE_ID, 10),
                 card_number,
                 expire_date,
                 temporary: temporary ? 1 : 0
@@ -124,7 +124,7 @@ app.post('/api/payments/verify-token', async (req, res, next) => {
         const response = await createAxiosInstance().post(
             '/card_token/verify',
             {
-                service_id: CLICK_API.SERVICE_ID,
+                service_id: parseInt(CLICK_API.SERVICE_ID, 10),
                 card_token,
                 sms_code
             }
