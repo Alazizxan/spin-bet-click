@@ -9,15 +9,49 @@ dotenv.config();
 
 const app = express();
 
-// Telegram bot tokenini .env faylidan olish
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+// Telegram bot konfiguratsiyasi
+let bot;
+try {
+    bot = new TelegramBot(process.env.BOT_TOKEN, {
+        polling: {
+            autoStart: true,
+            params: {
+                timeout: 10
+            }
+        },
+        webHook: false
+    });
 
-// Foydalanuvchi ma'lumotlarini saqlash uchun Map
-const userStates = new Map();
+    // Polling xatolarini ushlab olish
+    bot.on('polling_error', (error) => {
+        if (error.code === 'ETELEGRAM' && error.message.includes('409')) {
+            console.log('Polling error detected, restarting bot...');
+            bot.stopPolling().then(() => {
+                setTimeout(() => {
+                    bot.startPolling();
+                }, 5000);
+            });
+        } else {
+            console.error('Bot polling error:', error);
+        }
+    });
+
+    // Bot ishga tushganini tekshirish
+    bot.getMe().then((botInfo) => {
+        console.log(`Bot started successfully: @${botInfo.username}`);
+    });
+
+} catch (error) {
+    console.error('Error initializing bot:', error);
+    process.exit(1);
+}
 
 // Middleware for parsing JSON and URL-encoded bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Foydalanuvchi ma'lumotlarini saqlash uchun Map
+const userStates = new Map();
 
 // Click.uz API configuration
 const CLICK_API = {
@@ -38,7 +72,9 @@ const validateConfig = () => {
     }
 };
 
-// Auth generation and axios instance creation functions remain the same
+validateConfig();
+
+// Auth generation
 const generateClickAuth = () => {
     const timestamp = Math.floor(Date.now() / 1000);
     const digest = crypto.createHash('sha1')
@@ -47,6 +83,7 @@ const generateClickAuth = () => {
     return `${process.env.MERCHANT_USER_ID}:${digest}:${timestamp}`;
 };
 
+// Axios instance creation
 const createAxiosInstance = () => {
     return axios.create({
         baseURL: process.env.CLICK_BASE_URL || 'https://api.click.uz/v2/merchant/',
@@ -58,11 +95,10 @@ const createAxiosInstance = () => {
     });
 };
 
-// Telegram bot handlers
+// Bot handlers
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     
-    // Contact tugmasini yaratish
     const keyboard = {
         keyboard: [[{
             text: '📱 Raqamni yuborish',
@@ -77,21 +113,19 @@ bot.onText(/\/start/, async (msg) => {
     });
 });
 
-// Contact qabul qilish
+// Contact handler
 bot.on('contact', async (msg) => {
     const chatId = msg.chat.id;
     const contact = msg.contact;
     
-    // Foydalanuvchi kontaktini saqlash
     userStates.set(chatId, {
         phone: contact.phone_number
     });
     
-    // Asosiy menuni ko'rsatish
     showMainMenu(chatId);
 });
 
-// Asosiy menu
+// Main menu function
 function showMainMenu(chatId) {
     const keyboard = {
         keyboard: [[
@@ -106,14 +140,14 @@ function showMainMenu(chatId) {
     });
 }
 
-// Hisobni to'ldirish jarayoni
+// Hisobni to'ldirish
 bot.onText(/💰 Hisobni to'ldirish/, async (msg) => {
     const chatId = msg.chat.id;
     userStates.set(chatId, { ...userStates.get(chatId), state: 'waiting_spin_id' });
     bot.sendMessage(chatId, 'SPIN bet ID raqamingizni kiriting:');
 });
 
-// Spin ID qabul qilish va summa so'rash
+// Message handler
 bot.on('text', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -148,13 +182,21 @@ bot.on('text', async (msg) => {
         case 'waiting_expire_date':
             if (/^\d{4}$/.test(text)) {
                 try {
-                    // Card token olish
+                    console.log('Card token request payload:', {
+                        service_id: parseInt(CLICK_API.SERVICE_ID, 10),
+                        card_number: userData.cardNumber,
+                        expire_date: text,
+                        temporary: 1
+                    });
+
                     const response = await createAxiosInstance().post('/card_token/request', {
                         service_id: parseInt(CLICK_API.SERVICE_ID, 10),
                         card_number: userData.cardNumber,
                         expire_date: text,
                         temporary: 1
                     });
+
+                    console.log('Card token response:', response.data);
 
                     userStates.set(chatId, { 
                         ...userData, 
@@ -165,6 +207,7 @@ bot.on('text', async (msg) => {
                     
                     bot.sendMessage(chatId, 'SMS kodini kiriting:');
                 } catch (error) {
+                    console.error('Card token error:', error.response?.data || error);
                     bot.sendMessage(chatId, 'Xatolik yuz berdi. Qaytadan urinib ko\'ring.');
                     showMainMenu(chatId);
                 }
@@ -175,39 +218,60 @@ bot.on('text', async (msg) => {
 
         case 'waiting_sms_code':
             try {
-                // SMS kodni tekshirish
-                await createAxiosInstance().post('/card_token/verify', {
+                console.log('SMS verification request payload:', {
                     service_id: parseInt(CLICK_API.SERVICE_ID, 10),
                     card_token: userData.cardToken,
                     sms_code: text
                 });
 
-                // To'lovni amalga oshirish
-                const paymentResponse = await createAxiosInstance().post('/card_token/payment', {
+                const verifyResponse = await createAxiosInstance().post('/card_token/verify', {
+                    service_id: parseInt(CLICK_API.SERVICE_ID, 10),
+                    card_token: userData.cardToken,
+                    sms_code: text
+                });
+
+                console.log('SMS verification response:', verifyResponse.data);
+
+                const paymentPayload = {
                     service_id: parseInt(CLICK_API.SERVICE_ID, 10),
                     card_token: userData.cardToken,
                     amount: userData.amount.toString(),
                     transaction_parameter: Date.now()
-                });
-                console.log('Full Payment Response:', JSON.stringify(paymentResponse.data, null, 2));
+                };
+
+                console.log('Payment request payload:', paymentPayload);
+
+                const paymentResponse = await createAxiosInstance().post('/card_token/payment', paymentPayload);
+
+                console.log('Payment response:', JSON.stringify(paymentResponse.data, null, 2));
 
                 if (paymentResponse.data.error_code === 0) {
-                    bot.sendMessage(chatId, `✅ To'lov muvaffaqiyatli amalga oshirildi!\n\nSumma: ${userData.amount} UZS\nID: ${userData.spinId}`);
+                    const successMessage = `✅ To'lov muvaffaqiyatli amalga oshirildi!\n\n` +
+                        `Summa: ${userData.amount} UZS\n` +
+                        `ID: ${userData.spinId}\n` +
+                        `To'lov ID: ${paymentResponse.data.payment_id}\n` +
+                        `Status: ${paymentResponse.data.payment_status}`;
+                    
+                    bot.sendMessage(chatId, successMessage);
                 } else {
-                    bot.sendMessage(chatId, `❌ To'lov amalga oshirilmadi: ${paymentResponse.data.error_note},${paymentResponse.data.error_code}`);
+                    const errorMessage = `❌ To'lov amalga oshirilmadi:\n` +
+                        `Xato kodi: ${paymentResponse.data.error_code}\n` +
+                        `Xato haqida: ${paymentResponse.data.error_note}`;
+                    
+                    bot.sendMessage(chatId, errorMessage);
                 }
             } catch (error) {
+                console.error('Payment Error:', error.response?.data || error);
                 bot.sendMessage(chatId, 'Xatolik yuz berdi. Qaytadan urinib ko\'ring.');
             }
             
-            // Foydalanuvchi holatini tozalash va asosiy menuga qaytish
             userStates.delete(chatId);
             showMainMenu(chatId);
             break;
     }
 });
 
-// Error handler middleware remains the same
+// Error handler middleware
 app.use((err, req, res, next) => {
     console.error('Error details:', err.response?.data || err);
     if (err.response) {
@@ -222,9 +286,38 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Graceful shutdown handling
+process.on('SIGINT', async () => {
+    console.log('Received SIGINT. Stopping bot...');
+    await bot.stopPolling();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('Received SIGTERM. Stopping bot...');
+    await bot.stopPolling();
+    process.exit(0);
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log('Telegram bot started');
+});
+
+// Handle server errors
+server.on('error', (error) => {
+    console.error('Server error:', error);
+    process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    process.exit(1);
 });
