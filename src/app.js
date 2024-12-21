@@ -194,7 +194,7 @@ bot.on('text', async (msg) => {
                 if (paymentResponse.data.error_code === 0) {
                     bot.sendMessage(chatId, `✅ To'lov muvaffaqiyatli amalga oshirildi!\n\nSumma: ${userData.amount} UZS\nID: ${userData.spinId}`);
                 } else {
-                    bot.sendMessage(chatId, `❌ To'lov amalga oshirilmadi: ${paymentResponse.data.error_note}`);
+                    bot.sendMessage(chatId, `❌ To'lov amalga oshirilmadi: ${paymentResponse.data.error_note},${paymentResponse.data.error_code}`);
                 }
             } catch (error) {
                 bot.sendMessage(chatId, 'Xatolik yuz berdi. Qaytadan urinib ko\'ring.');
