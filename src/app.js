@@ -2,11 +2,18 @@ const express = require('express');
 const axios = require('axios');
 const crypto = require('crypto');
 const dotenv = require('dotenv');
+const TelegramBot = require('node-telegram-bot-api');
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+
+// Telegram bot tokenini .env faylidan olish
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+
+// Foydalanuvchi ma'lumotlarini saqlash uchun Map
+const userStates = new Map();
 
 // Middleware for parsing JSON and URL-encoded bodies
 app.use(express.json());
@@ -19,12 +26,11 @@ const CLICK_API = {
     SECRET_KEY: process.env.CLICK_SECRET_KEY,
     MERCHANT_ID: process.env.CLICK_MERCHANT_ID,
     MERCHANT_USER_ID: process.env.MERCHANT_USER_ID
-
 };
 
 // Validate environment variables
 const validateConfig = () => {
-    const required = ['CLICK_SERVICE_ID', 'CLICK_SECRET_KEY', 'CLICK_MERCHANT_ID','MERCHANT_USER_ID'];
+    const required = ['CLICK_SERVICE_ID', 'CLICK_SECRET_KEY', 'CLICK_MERCHANT_ID', 'MERCHANT_USER_ID', 'BOT_TOKEN'];
     for (const key of required) {
         if (!process.env[key]) {
             throw new Error(`Missing required environment variable: ${key}`);
@@ -32,22 +38,17 @@ const validateConfig = () => {
     }
 };
 
-// Call validation on startup
-validateConfig();
-
-// Node.js "crypto" moduli orqali "Auth" sarlavhasini generatsiya qilish
+// Auth generation and axios instance creation functions remain the same
 const generateClickAuth = () => {
-    const timestamp = Math.floor(Date.now() / 1000); // UNIX timestamp (10 raqamli)
-    const digest = require('crypto').createHash('sha1')
+    const timestamp = Math.floor(Date.now() / 1000);
+    const digest = crypto.createHash('sha1')
         .update(timestamp + process.env.CLICK_SECRET_KEY)
         .digest('hex');
     return `${process.env.MERCHANT_USER_ID}:${digest}:${timestamp}`;
 };
 
-// Helper function to create Axios instance with Auth header
-// "Axios" instansiyasini "Auth" sarlavhasi bilan yaratish
 const createAxiosInstance = () => {
-    return require('axios').create({
+    return axios.create({
         baseURL: process.env.CLICK_BASE_URL || 'https://api.click.uz/v2/merchant/',
         headers: {
             'Auth': generateClickAuth(),
@@ -57,220 +58,166 @@ const createAxiosInstance = () => {
     });
 };
 
-
-// Validation middleware for card token requests
-const validateCardTokenRequest = (req, res, next) => {
-    const { card_number, expire_date } = req.body;
+// Telegram bot handlers
+bot.onText(/\/start/, async (msg) => {
+    const chatId = msg.chat.id;
     
-    if (!card_number || !expire_date) {
-        return res.status(400).json({
-            error_code: -1,
-            error_note: 'Card number and expiration date are required'
-        });
-    }
-
-    if (!/^\d{16}$/.test(card_number)) {
-        return res.status(400).json({
-            error_code: -1,
-            error_note: 'Invalid card number format'
-        });
-    }
-
-    if (!/^\d{4}$/.test(expire_date)) {
-        return res.status(400).json({
-            error_code: -1,
-            error_note: 'Invalid expiration date format (should be MMYY)'
-        });
-    }
-
-    next();
-};
-
-// Routes
-
-// 1. Create card token
-app.post('/api/payments/Prepare', validateCardTokenRequest, async (req, res, next) => {
-    try {
-        const { card_number, expire_date, temporary } = req.body;
-        
-        const response = await createAxiosInstance().post(
-            '/card_token/request',
-            {
-                service_id: parseInt(CLICK_API.SERVICE_ID, 10),
-                card_number,
-                expire_date,
-                temporary: temporary ? 1 : 0
-            }
-        );
-        
-        res.json(response.data);
-    } catch (error) {
-        next(error);
-    }
+    // Contact tugmasini yaratish
+    const keyboard = {
+        keyboard: [[{
+            text: '📱 Raqamni yuborish',
+            request_contact: true
+        }]],
+        resize_keyboard: true,
+        one_time_keyboard: true
+    };
+    
+    bot.sendMessage(chatId, 'Xush kelibsiz! Iltimos, raqamingizni yuboring:', {
+        reply_markup: keyboard
+    });
 });
 
-// 2. Verify card token
-app.post('/api/payments/verify-token', async (req, res, next) => {
-    try {
-        const { card_token, sms_code } = req.body;
-
-        if (!card_token || !sms_code) {
-            return res.status(400).json({
-                error_code: -1,
-                error_note: 'Card token and SMS code are required'
-            });
-        }
-        
-        const response = await createAxiosInstance().post(
-            '/card_token/verify',
-            {
-                service_id: parseInt(CLICK_API.SERVICE_ID, 10),
-                card_token,
-                sms_code
-            }
-        );
-        
-        res.json(response.data);
-    } catch (error) {
-        next(error);
-    }
+// Contact qabul qilish
+bot.on('contact', async (msg) => {
+    const chatId = msg.chat.id;
+    const contact = msg.contact;
+    
+    // Foydalanuvchi kontaktini saqlash
+    userStates.set(chatId, {
+        phone: contact.phone_number
+    });
+    
+    // Asosiy menuni ko'rsatish
+    showMainMenu(chatId);
 });
 
-// 3. Process payment
-// merchant_trans_id ni generatsiya qiluvchi funksiya
-function generateMerchantTransId() {
-    const randomOrder = Math.random().toString(36).substring(2, 10).toUpperCase(); // Tasodifiy harflar va raqamlar
-    const timestamp = Date.now(); // Vaqt tamg'asi
-    return `TRANS_${randomOrder}_${timestamp}`; // Yagona tranzaksiya ID
+// Asosiy menu
+function showMainMenu(chatId) {
+    const keyboard = {
+        keyboard: [[
+            { text: '💰 Hisobni to\'ldirish' },
+            { text: '💳 Hisobdan pul yechish' }
+        ]],
+        resize_keyboard: true
+    };
+    
+    bot.sendMessage(chatId, 'Kerakli amalni tanlang:', {
+        reply_markup: keyboard
+    });
 }
 
-// API endpoint
-app.post('/api/payments/Complete', async (req, res, next) => {
-    try {
-        const { card_token, amount } = req.body;
+// Hisobni to'ldirish jarayoni
+bot.onText(/💰 Hisobni to'ldirish/, async (msg) => {
+    const chatId = msg.chat.id;
+    userStates.set(chatId, { ...userStates.get(chatId), state: 'waiting_spin_id' });
+    bot.sendMessage(chatId, 'SPIN bet ID raqamingizni kiriting:');
+});
 
-        // Validate required fields
-        if (!card_token || !amount) {
-            return res.status(400).json({
-                error_code: -1,
-                error_note: 'Missing required fields: card_token and amount'
-            });
-        }
+// Spin ID qabul qilish va summa so'rash
+bot.on('text', async (msg) => {
+    const chatId = msg.chat.id;
+    const text = msg.text;
+    const userData = userStates.get(chatId);
 
-        // Validate amount format
-        if (typeof amount !== 'number' || amount <= 0) {
-            return res.status(400).json({
-                error_code: -1,
-                error_note: 'Amount must be a positive number'
-            });
-        }
+    if (!userData) return;
 
-        // Generate merchant_trans_id
-        const merchant_trans_id = generateMerchantTransId();
+    switch (userData.state) {
+        case 'waiting_spin_id':
+            userStates.set(chatId, { ...userData, spinId: text, state: 'waiting_amount' });
+            bot.sendMessage(chatId, 'To\'lov summasini kiriting (UZS):');
+            break;
 
-        // Create payload
-        let transactionCounter = 0;
+        case 'waiting_amount':
+            if (!isNaN(text) && Number(text) > 0) {
+                userStates.set(chatId, { ...userData, amount: Number(text), state: 'waiting_card_number' });
+                bot.sendMessage(chatId, 'Karta raqamingizni kiriting (16 raqam):');
+            } else {
+                bot.sendMessage(chatId, 'Noto\'g\'ri summa. Iltimos, raqam kiriting.');
+            }
+            break;
 
-        const payload = {
-            service_id: parseInt(CLICK_API.SERVICE_ID, 10),
-            card_token: card_token,
-            amount: amount.toString(), // Floatni stringga aylantirish
-            transaction_parameter: ++transactionCounter // Har safar unik int o'sadi
-        };
-        
+        case 'waiting_card_number':
+            if (/^\d{16}$/.test(text)) {
+                userStates.set(chatId, { ...userData, cardNumber: text, state: 'waiting_expire_date' });
+                bot.sendMessage(chatId, 'Karta amal qilish muddatini kiriting (MMYY formatida):');
+            } else {
+                bot.sendMessage(chatId, 'Noto\'g\'ri karta raqami. 16 ta raqam kiriting.');
+            }
+            break;
 
-        console.log('Payment request payload:', payload);
+        case 'waiting_expire_date':
+            if (/^\d{4}$/.test(text)) {
+                try {
+                    // Card token olish
+                    const response = await createAxiosInstance().post('/card_token/request', {
+                        service_id: parseInt(CLICK_API.SERVICE_ID, 10),
+                        card_number: userData.cardNumber,
+                        expire_date: text,
+                        temporary: 1
+                    });
 
-        // Send payment request to external API
-        const response = await createAxiosInstance().post(
-            '/card_token/payment',
-            payload
-        );
+                    userStates.set(chatId, { 
+                        ...userData, 
+                        expireDate: text,
+                        cardToken: response.data.card_token,
+                        state: 'waiting_sms_code'
+                    });
+                    
+                    bot.sendMessage(chatId, 'SMS kodini kiriting:');
+                } catch (error) {
+                    bot.sendMessage(chatId, 'Xatolik yuz berdi. Qaytadan urinib ko\'ring.');
+                    showMainMenu(chatId);
+                }
+            } else {
+                bot.sendMessage(chatId, 'Noto\'g\'ri format. MMYY formatida kiriting (masalan: 1225)');
+            }
+            break;
 
-        res.json({
-            error_code: response.data.error_code,
-            error_note: response.data.error_note,
-            payment_id: response.data.payment_id,
-            payment_status: response.data.payment_status
-        });
-    } catch (error) {
-        next(error);
+        case 'waiting_sms_code':
+            try {
+                // SMS kodni tekshirish
+                await createAxiosInstance().post('/card_token/verify', {
+                    service_id: parseInt(CLICK_API.SERVICE_ID, 10),
+                    card_token: userData.cardToken,
+                    sms_code: text
+                });
+
+                // To'lovni amalga oshirish
+                const paymentResponse = await createAxiosInstance().post('/card_token/payment', {
+                    service_id: parseInt(CLICK_API.SERVICE_ID, 10),
+                    card_token: userData.cardToken,
+                    amount: userData.amount.toString(),
+                    transaction_parameter: Date.now()
+                });
+
+                if (paymentResponse.data.error_code === 0) {
+                    bot.sendMessage(chatId, `✅ To'lov muvaffaqiyatli amalga oshirildi!\n\nSumma: ${userData.amount} UZS\nID: ${userData.spinId}`);
+                } else {
+                    bot.sendMessage(chatId, `❌ To'lov amalga oshirilmadi: ${paymentResponse.data.error_note}`);
+                }
+            } catch (error) {
+                bot.sendMessage(chatId, 'Xatolik yuz berdi. Qaytadan urinib ko\'ring.');
+            }
+            
+            // Foydalanuvchi holatini tozalash va asosiy menuga qaytish
+            userStates.delete(chatId);
+            showMainMenu(chatId);
+            break;
     }
 });
 
-
-// 4. Delete card token
-app.delete('/api/payments/card-token/:card_token', async (req, res, next) => {
-    try {
-        const { card_token } = req.params;
-        
-        if (!card_token) {
-            return res.status(400).json({
-                error_code: -1,
-                error_note: 'Card token is required'
-            });
-        }
-
-        const response = await createAxiosInstance().delete(
-            `/card_token/${CLICK_API.SERVICE_ID}/${card_token}`
-        );
-        
-        res.json(response.data);
-    } catch (error) {
-        next(error);
-    }
-});
-
-// 5. Check payment status
-app.get('/api/payments/status/:payment_id', async (req, res, next) => {
-    try {
-        const { payment_id } = req.params;
-
-        if (!payment_id) {
-            return res.status(400).json({
-                error_code: -1,
-                error_note: 'Payment ID is required'
-            });
-        }
-
-        const response = await createAxiosInstance().get(
-            `/payment_status/${CLICK_API.SERVICE_ID}/${payment_id}`
-        );
-
-        res.json(response.data);
-    } catch (error) {
-        next(error);
-    }
-});
-
-// Error handler middleware
-const errorHandler = (err, req, res, next) => {
+// Error handler middleware remains the same
+app.use((err, req, res, next) => {
     console.error('Error details:', err.response?.data || err);
-    
-    // Handle Axios errors
     if (err.response) {
         return res.status(err.response.status).json({
             error_code: err.response.data.error_code || -1,
             error_note: err.response.data.error_note || 'An error occurred with the payment service'
         });
     }
-
-    // Handle other errors
     res.status(500).json({
         error_code: -1,
         error_note: err.message || 'An unexpected error occurred'
-    });
-};
-
-// Use error handler
-app.use(errorHandler);
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        service: 'click-payment-service'
     });
 });
 
@@ -278,17 +225,5 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`Health check available at http://localhost:${PORT}/health`);
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-    console.error('Unhandled Rejection:', err);
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-    // Gracefully shutdown
-    process.exit(1);
+    console.log('Telegram bot started');
 });
