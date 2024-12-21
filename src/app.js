@@ -172,9 +172,10 @@ app.post('/api/payments/Complete', async (req, res, next) => {
         const payload = {
             service_id: CLICK_API.SERVICE_ID,
             card_token: card_token,
-            amount: amount,
+            amount: parseFloat(amount).toFixed(2), // Ikkita o'nlik qoldiq bilan formatlash
             transaction_parameter: merchant_trans_id
         };
+        
 
         console.log('Payment request payload:', payload);
 
