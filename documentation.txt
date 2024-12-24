@@ -1,0 +1,468 @@
+Click-API – Request
+Home
+Click-API – Request
+Description of interaction
+Interaction is via the API-interface on the provider’s server. API-interface shall fully comply with this document. Payment created in CLICK system is transmitted over HTTP (HTTPS) by the POST API-interface of the supplier. Supplier provides CLICK URL-addresses to a system in order to communicate with the API-interface. Interaction is divided into two stages:
+
+1. Prepare
+
+2. Complete
+
+Description of the stages of payment:
+Preparation and verification of payment (Prepare). Action = 0.
+
+Request parameters:
+#	Parameter name	Data type	Description
+1	click_trans_id	bigint	ID of transaction (iteration) in CLICK system, i.e. attempt to make a payment.
+2	service_id	int	ID of the service
+3	click_paydoc_id	bigint	Payment ID in CLICK system. Displayed to the customer in SMS when paying.
+4	merchant_trans_id	varchar	Order ID (for online shopping) / personal account / login in the billing of the supplier
+5	amount	float	Payment Amount (in soums)
+6	action	int	An action to perform. 0 – for Prepare
+7	error	int	Status code about completion of payment. 0 – successfully. In case of an error returns an error code.
+8	error_note	varchar	Identification of the code to complete the payment.
+9	sign_time	varchar	Payment date. Format is «YYYY-MM-DD HH:mm:ss»
+10	sign_string	varchar	TestString confirming the authenticity of the submitted query. MD5 hash from the following options:
+md5 (click_trans_id + service_id + SECRET_KEY * + merchant_trans_id + amount + action + sign_time)
+
+SECRET_KEY – a unique string issued to a supplier when connecting.
+
+Options of the reply:
+#	Parameter name	Data type	Description
+1	click_trans_id	bigint	Payment ID in CLICK system
+2	merchant_trans_id	varchar	Order ID (for online shopping) / personal account / login in the billing of the supplier
+3	merchant_prepare_id	int	Payment ID in the billing system of the supplier
+4	error	int	Status code about completion of payment. 0 – successfully. In case of an error returns an error code.
+5	error_note	varchar	Identification of the code to complete the payment.
+CLICK system checks the payment options (merchant_trans_id, amount) with this request:
+
+a. Presence of the formed order / login / personal account number in the billing system of the supplier, its actuality, and the ability of the Supplier to supply a product or service specified in the order.
+
+Note. For online shopping, when receiving a request for supplying an order with the indicated number, the supplier should reserve the appropriate product to prevent “interception” by other customers and purchase of the same product by several customers.
+
+b. The actuality of the order sum or payment.
+
+The supplier must return the order status / login / personal account number at this the request of:
+
+a. Order / login / personal account number and amount is relevant. Payment is pending.
+
+Upon receiving this status Complete request will be sent by the CLICK system.
+
+b. Order / login / personal account number and amount is irrelevant (canceled). Upon receiving this status Complete request with indication of cancellation of payment will be sent by the CLICK system.
+
+Note. Upon receiving a negative response from the Supplier in case the funds have already been written off from the User’s account (a request was given repetitively, if CLICK system does not wait for an reply to the previous Complete request and does not know the status of the order.), then CLICK system will give a Complete request with confirmation sign of the payment. If the funds are not charged, then CLICK also cancels the payment.
+
+c. The order was previously confirmed. Upon receiving this response from the CLICK system, the payment will be completed. Complete request will not be sent repetitively.
+
+Note. The Supplier should put protection from the repetitive payment in its billing system. For a payment which has been previously confirmed, with the same click_trans_id.
+
+Completion of the Payment (Complete). Action = 1.
+
+Request parameters:
+#	Parameter name	Data type	Description
+1	click_trans_id	bigint	Payment ID in CLICK system
+2	service_id	int	ID of the service
+3	click_paydoc_id	bigint	Payment Number in CLICK system. Displayed to the customer in SMS when paying.
+4	merchant_trans_id	varchar	Order ID (for online shopping) / personal account / login in the billing of the supplier
+5	merchant_prepare_id	int	Payment ID in the billing system of the supplier for confirmation, received in “Prepare” request
+6	amount	float	Payment Amount (in soums)
+7	action	int	An action to perform. 1 – for Comlete
+8	error	int	Status code about completion of payment. 0 – successfully. In case of an error returns an error code.
+9	error_note	varchar	Identification of the code to complete the payment.
+10	sign_time	varchar	Payment date. Format is «YYYY-MM-DD HH:mm:ss»
+11	sign_string	varchar	TestString confirming the authenticity of the submitted query. MD5 hash from the following options:
+md5 (click_trans_id + service_id + SECRET_KEY* + merchant_trans_id + merchant_prepare_id + amount + action + sign_time)
+
+SECRET_KEY – a unique string issued to a supplier when connecting.
+
+Options of the reply:
+#	Parameter name	Data type	Description
+1	click_trans_id	bigint	Payment ID in CLICK system
+2	merchant_trans_id	varchar	Order ID (for online shopping) / personal account / login in the billing of the supplier
+3	merchant_confirm_id	int	Transaction ID to complete the payment in the billing system (may be NULL)
+4	error	int	Status code about completion of payment. 0 – successfully. In case of an error returns an error code.
+5	error_note	varchar	Identification of the code to complete the payment.
+This request completes the process of on-line payment. Upon receiving the positive response from the Service Provider on the Prepare request, CLICK system checks the possibility of payment
+for the order by the User. Depending on the success of writing off of amounts, Complete request contains the error parameter with the following values:
+
+1. “0” – successfully. Sent when the funds are written off successfully. In this case the Supplier shall supply the goods or render the paid service.
+
+2. “<= – 1” – Cancel. Sent in case of writing off error or other error, the error code is returned. In this case the Supplier shall remove the reservation (if it is available) from the products, as well as return the response code -9 (see. Table of responses). In case of cancellation by the CLICK, an error description will be sent.
+
+Note. If the response to the ‘Prepare’ request and withdrawal of funds from the card are successful, the response to the Complete request cannot be an error (unless the payment was previously confirmed error = -4 or a second attempt to confirm the previously canceled payment is done error = -9). Upon receipt of an ‘error’ response from the Vendor, after several attempts, the payment will hang for manual investigation by the CLICK Technical Support Service.
+
+
+If necessary, if an error occurred in the provision of services / sales of the goods after the successful withdrawal of funds from the card and during the execution of the ‘Complete’ request, the Vendor’s Billing responds to the ‘Complete’ request ‘successfully’ and sends a request for ‘cancellation of payment’ (see CLICK-API- MERCHANT item 3. Payment_cancel)
+
+© 2024 Click
+
+
+Merchant – Request
+Home
+Merchant – Request
+Connection and making requests
+API Endpoint
+https://api.click.uz/v2/merchant/
+
+Private Data
+Upon registration, service provider receives following data to connect and make requests to an API:
+
+merchant_id
+service_id
+merchant_user_id
+secret_key
+secret_key parameter is private and service provider is fully responsible for its safety.
+Exposing secret_key may end up in compromising your data.
+
+Authentication
+HTTP Header “Auth: merchant_user_id:digest:timestamp”
+digest – sha1(timestamp + secret_key)
+timestamp – UNIX timestamp (10 digit seconds from epoch start)
+
+Required headers
+Accept
+Auth
+Content-Type
+
+Supported content types
+application/json
+application/xml
+
+ 
+
+Create invoice
+Request
+POST https://api.click.uz/v2/merchant/invoice/create HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:1519051543
+{
+“service_id”: :service_id,
+“amount”: :amount,
+“phone_number”: :phone_number,
+“merchant_trans_id”: :merchant_trans_id
+}
+Request parameters
+#	Parameter	Data type	Description
+1	service_id	integer	Service ID
+2	amount	float	Requested amount
+3	phone_number	string	Invoice receiver
+4	merchant_trans_id	string	Order ID (for online shopping) / personal account / login in the billing of the supplier
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”,
+“invoice_id”: 1234567
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+3	invoice_id	bigint	Invoice Identifier
+ 
+
+Invoice status check
+Request
+GET https://api.click.uz/v2/merchant/invoice/status/:service_id/:invoice_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:1519051543
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”,
+“invoice_status”: -99,
+“invoice_status_note”: “Deleted”,
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+3	invoice_status	bigint	Invoice status code
+4	invoice_status_note	int	Status description
+ 
+
+Payment status check
+Request
+GET https://api.click.uz/v2/merchant/payment/status/:service_id/:payment_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:1519051543
+Request parameters
+#	Parameter	Data type	Description
+1	service_id	integer	Service ID
+2	payment_id	bigint	Payment ID
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”,
+“payment_id”: 1234567,
+“payment_status”: 1
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+3	payment_id	bigint	Payment Identifier
+4	payment_status	int	Payment status code
+ 
+
+Payment status check by merchant_trans_id
+Request
+GET https://api.click.uz/v2/merchant/payment/status_by_mti/:service_id/:merchant_trans_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:15190515
+Request parameters
+#	Parameter	Data type	Description
+1	service_id	integer	Service ID
+2	merchant_trans_id	string	Merchant transaction ID
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”,
+“payment_id”: 1234567,
+“merchant_trans_id”: “user123”
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+3	payment_id	bigint	Payment Identifier
+4	payment_status	int	Payment status code
+Payment reversal (cancel)
+Request
+DELETE https://api.click.uz/v2/merchant/payment/reversal/:service_id/:payment:id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:1519051543
+Request parameters
+#	Parameter	Data type	Description
+1	service_id	integer	Service ID
+2	payment_id	bigint	Payment ID
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”,
+“payment_id”: 1234567
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+3	payment_id	bigint	Payment Identifier
+Reversal conditions
+Payment should be successfully completed
+Only payments created in current reporting month can be reverted
+Payments from previous month can be canceled only on first day of current month.  Payment should be made with Online card.
+Payment reversal can be denied due to refusal by UZCARD
+Partial refund
+Refund part of the amount
+
+Request
+DELETE https://api.click.uz/v2/merchant/payment/partial_reversal/:service_id/:payment_id/:amount HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:1519051543
+Request parameters
+#	Наименование параметра	Тип данных	Описание
+1	service_id	integer	Service ID
+2	payment_id	bigint	Payment ID
+2	amount	float	Refund amount
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+Create card token
+Request
+POST https://api.click.uz/v2/merchant/card_token/request HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+{
+“service_id”: :service_id,
+“card_number”: :card_number,
+“expire_date”: :expire_date, // (MMYY)
+“temporary”: 1 // (0|1)
+}
+temporary – create token for one time use.
+Temporary tokens are automatically removed after payment.
+
+Request parameters
+#	Parameter	Data type	Description
+1	service_id	integer	Service ID
+2	card_number	string	Card number
+3	expire_date	string	Card expire date
+4	temporary	bit	Create temporary card
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”,
+“card_token”: “3B1DF3F1-7358-407C-B57F-0F6351310803”,
+“phone_number”: “99890***1234”,
+“temporary”: 1,
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+3	card_token	string	Card token
+4	phone_number	string	User phone number
+4	temporary	bit	Type of created token
+ 
+
+Verify card token
+Request
+POST https://api.click.uz/v2/merchant/card_token/verify HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:1519051543
+{
+“service_id”: :service_id,
+“card_token”: :card_token,
+“sms_code”: :sms_code
+}
+Request parameters
+#	Parameter	Data type	Description
+1	service_id	integer	Service ID
+2	card_token	string	Card token
+3	sms_code	int	Recevied sms code
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”,
+“card_number”: “8600 55** **** 3244”,
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+3	card_number	string	Card number
+ 
+
+Payment with token
+Request
+POST https://api.click.uz/v2/merchant/card_token/payment HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:1519051543
+{
+“service_id”: :service_id,
+“card_token”: :card_token,
+“amount”: :amount,
+“transaction_parameter”: :merchant_trans_id
+}
+transaction_parameter – user or contract identifier on merchant billing
+
+Request parameters
+#	Parameter	Data type	Description
+1	card_token	string	Card token
+2	amount	float	Payment amount
+3	merchant_trans_id	string	Merchant transaction ID
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”,
+“payment_id”: “598761234”,
+“payment_status”: 1
+}
+Response parameters
+#	Parameter	Data type	Description
+1	error_code	integer	Error code
+2	error_note	string	Error description
+3	payment_id	bigint	Payment Identifier
+4	payment_status	int	Payment status code
+ 
+
+Delete card token
+Request
+DELETE https://api.click.uz/v2/merchant/card_token/:service_id/:card_token HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: 123:356a192b7913b04c54574d18c28d46e6395428ab:1519051543
+Request parameters
+#	Parameter	Data type	Description
+1	service_id	integer	Service ID
+2	card_token	string	Card token
+Response
+HTTP/1.1 200 OK
+Content-Type: application/json
+{
+“error_code”: error_code,
+“error_note”: “Error description”
+}
+© 2024 Click
+
+Errors
+Authentication and other errors related to API are returned using HTTP Status Codes.
+
+#	error	Описание
+1	200	OK
+2	201	OK
+3	400	Bad request (malformed data or URI)
+4	401	Not Authorized (Auth error)
+5	403	Forbidden (Method not allowed)
+6	404	Not Found (Method not found)
+7	406	Not Acceptable (Invalid data type)
+8	410	Gone (Deprecated method)
+9	500	Internal Server Error (Critical error in API)
+10	502	Service is down or being upgraded.pgraded.
+© 2024 Click
+
+
+EXAMPLES OF RESPONSES
+The service provider returns a response in JSON format with the following parameters:
+
+In case of a successful operation
+
+#	Parameter name	Data type	Description
+1	error	int	Operation status code. If successful, the operation code must be equal to “0”
+2	error_note	varchar	Description of the status
+3	click_trans_id	int	Payment ID in CLICK system
+4	merchant_trans_id	varchar	Payment ID in Online Store systems
+5	merchant_prepare_id
+или
+merchant_confirm_id	int	Payment ID in the billing system of the supplier for confirmation
+In case of an error with the operation
+#	Parameter name	Data type	Description
+1	error	int	Operation status code. If successful, the operation code must be equal to “0”
+2	error_note	varchar	Description of the status
+ERRORS RETURNED BY CLICK SYSTEM
+#	error	error_note	Description
+1	0	Success	
+2	< 0	Description of the error	When receiving a negative error code, the supplier should cancel the payment in the billing system and return the error code -9
+ERRORS RETURN BY SUPPLIERS SYSTEM
+#	error	error_note	Description
+1	0	Success	Successful request
+2	-1	SIGN CHECK FAILED!	Signature verification error
+3	-2	Incorrect parameter amount	Invalid payment amount
+4	-3	Action not found	The requested action is not found
+5	-4	Already paid	The transaction was previously confirmed (when trying to confirm or cancel the previously confirmed transaction)
+6	-5	User does not exist	Do not find a user / order (check parameter merchant_trans_id)
+7	-6	Transaction does not exist	The transaction is not found (check parameter merchant_prepare_id)
+8	-7	Failed to update user	An error occurred while changing user data (changing account balance, etc.)
+9	-8	Error in request from click	The error in the request from CLICK (not all transmitted parameters, etc.)
+10	-9	Transaction cancelled	The transaction was previously canceled (When you attempt to confirm or cancel the previously canceled transaction)
+© 2024 Click
