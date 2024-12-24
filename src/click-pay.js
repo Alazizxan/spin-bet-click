@@ -37,6 +37,41 @@ const createAxiosInstance = () => {
     });
 };
 
+
+
+const requestCardTokenWithTimeout = async (cardNumber, expireDate) => {
+    const timeout = 4000; // 4 soniya
+
+    // Timeout uchun promise
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Karta ma\'lumotlari noto\'g\'ri')), timeout)
+    );
+
+    try {
+        const response = await Promise.race([
+            createAxiosInstance().post('/card_token/request', {
+                service_id: parseInt(CLICK_API.SERVICE_ID, 10),
+                card_number: cardNumber,
+                expire_date: expireDate,
+                temporary: 0,
+            }),
+            timeoutPromise, // Agar 4 soniya ichida tugamasa, timeout xatosini qaytaradi
+        ]);
+
+        return response.data;
+    } catch (error) {
+        throw new Error(
+            'Karta token so\'rovida xatolik: ' +
+            (error.response?.data?.error_note || error.message)
+        );
+    }
+};
+
+
+
+
+
+
 // Request for card token
 const requestCardToken = async (cardNumber, expireDate) => {
     try {
@@ -86,6 +121,7 @@ const makePayment = async (cardToken, amount) => {
 
 module.exports = {
     requestCardToken,
+    requestCardTokenWithTimeout,
     verifyCardToken,
     makePayment
 };
