@@ -2,11 +2,10 @@ require('dotenv').config();
 
 const config = {
     CLICK_API: {
-        BASE_URL: process.env.CLICK_BASE_URL,
-        SERVICE_ID: process.env.CLICK_SERVICE_ID,
-        SECRET_KEY: process.env.CLICK_SECRET_KEY,
-        MERCHANT_ID: process.env.CLICK_MERCHANT_ID,
-        MERCHANT_USER_ID: process.env.CLICK_MERCHANT_USER_ID,
+        SECRET_KEY: process.env.CLICK_API_SECRET_KEY,
+        MERCHANT_USER_ID: process.env.CLICK_API_MERCHANT_USER_ID,
+        SERVICE_ID: process.env.CLICK_API_SERVICE_ID,
+        BASE_URL: process.env.CLICK_API_BASE_URL,
     },
     PAYMENT_CLIENT: {
         CASHDESK_PASSWORD: process.env.CASHDESK_PASSWORD,

