@@ -2,19 +2,13 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const dotenv = require('dotenv');
-
+const config = require('./config');
+const { CLICK_API } = require('./config');
 // Load environment variables
 dotenv.config();
 
 // Click.uz API configuration
-const CLICK_API = {
-    BASE_URL: 'https://api.click.uz/v2/merchant',
-    SERVICE_ID: '38391',
-    SECRET_KEY: 'XIlHKia6zVcdW',
-    MERCHANT_ID: '26291',
-    MERCHANT_USER_ID: '47931'
 
-};
 
 // Auth generation
 const generateClickAuth = () => {

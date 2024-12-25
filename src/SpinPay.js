@@ -1,9 +1,12 @@
+const config = require('./config'); // config faylni import qilamiz
+
+
 class PaymentAPIClient {
     constructor() {
-        this.cashdeskPassword = 'TuAT5ef2';
-        this.cashdeskId = '1293755';
-        this.apiKey = 'a2640a353b22fe063727d6aef8869fe5876630f5faccdaad42c40b1e5ac223d3';
-        this.baseUrl = 'https://partners.servcul.com';
+        this.cashdeskPassword = config.PAYMENT_CLIENT.CASHDESK_PASSWORD;
+        this.cashdeskId = config.PAYMENT_CLIENT.CASHDESK_ID;
+        this.apiKey = config.PAYMENT_CLIENT.API_KEY;
+        this.baseUrl = config.PAYMENT_CLIENT.BASE_URL;
     }
 
     async _generateSha256(inputString) {
