@@ -18,6 +18,7 @@ mongoose.connect(config.DATABASE.URI, {
 // Schemas
 const UserSchema = new mongoose.Schema({
     telegramId: String,
+    refferalId: String,
     username: String,
     fullName: String,
     phone: String,
@@ -59,13 +60,19 @@ const transactions = new Map();
 // Keyboard Layouts
 const mainKeyboard = Markup.keyboard([
     ['💳 Hisob To\'ldirish', '💰 Pul yechish'],
-    ['Support', 'Qo\'llanma']
+    ['☎️ Aloqa', 'Qo\'llanma'],
+    ['refferal'],
 ]).resize();
 
 const adminKeyboard = Markup.keyboard([
     ['💳 Hisob To\'ldirish', '💰 Pul yechish'],
     ['👤 Userlar', '📊 Transferlar', '📨 Hammaga Xabar'],
-    ['Support', 'Qo\'llanma']
+    ['☎️ Aloqa', 'Qo\'llanma']
+]).resize();
+
+const refferalKeyboard = Markup.keyboard([
+    ['Taklif Qilsh', 'Takliflarim'],
+    ['🔙 Orqaga'],
 ]).resize();
 
 const usersKeyboard = Markup.keyboard([
@@ -93,7 +100,7 @@ const backKeyboard = Markup.keyboard([
 const platformButtons = Markup.inlineKeyboard([
     [Markup.button.callback('SpinBetter', 'platform_spinbetter')],
     [Markup.button.callback('1xBet', 'platform_1xbet')],
-    [Markup.button.callback('LineBet', 'platform_linebet')]
+    [Markup.button.callback('Pro1Bet', 'platform_linebet')]
 ]).resize();
 
 // Helper Functions
@@ -282,7 +289,7 @@ const notifyAdmins = async (message, errorLevel = 'info') => {
     }
 };
 
-const sendTransactionNotification = async (transactionData, channelMessage = true) => {
+const sendTransactionNotification = async (transactionData, channelMessage = false) => {
     await saveTransaction({
         ...transactionData,
         type: 'deposit',
@@ -314,7 +321,7 @@ ${transactionData.error ? `❌ Xatolik: ${transactionData.error}` : ''}
     }
 };
 
-const sendPayoutNotification = async (payoutData, channelMessage = true) => {
+const sendPayoutNotification = async (payoutData, channelMessage = false) => {
     await saveTransaction({
         ...payoutData,
         type: 'withdrawal',
@@ -353,6 +360,16 @@ async function checkUserExists(telegramId) {
         console.error('Error checking user:', error);
         return false;
     }
+}
+
+async function calculateModifiedValue(input) {
+    // Kiruvchi stringdan "-" belgini olib tashlash
+    let number = parseFloat(input.replace('-', ''));
+    
+    // Raqamdan 3% ni ayirish
+    let result = number - (number * 0.03);
+    
+    return result;
 }
 
 async function saveUser(userData) {
@@ -437,6 +454,8 @@ const handleBack = async (ctx) => {
             nextState = 'MAIN_MENU';
             message = 'Asosiy menyu:';
             break;
+
+        case 'REFFERAL':
     }
 
     setState(ctx.from.id, nextState, userState.data);
@@ -444,105 +463,90 @@ const handleBack = async (ctx) => {
 };
 
 // Bot Commands
+// Start komandasini qo'llash
+// Start komandasini qo'llash
 bot.command('start', async (ctx) => {
     if (!ctx.from) return;
-    
+
     try {
-        const user = await User.findOne({ telegramId: ctx.from.id });
-        
+        const telegramId = ctx.from.id;
+
+        // Query orqali referal ID ni olish
+        const args = ctx.message.text.split(' ');
+        const refferalId = args[1] || null; // Agar referal ID bo'lmasa, null
+
+        let user = await User.findOne({ telegramId });
+
         if (user) {
-            setState(ctx.from.id, 'MAIN_MENU');
+            // Foydalanuvchi mavjud, faqat telefon raqamini yangilash uchun 'contact' hodisasi ishlatiladi
+            setState(telegramId, 'MAIN_MENU');
             const keyboard = user.isAdmin ? adminKeyboard : mainKeyboard;
             await ctx.reply(`Qaytib kelganingizdan xursandmiz, ${user.fullName}!`, keyboard);
-            
+
+            // Oxirgi faoliyat vaqtini yangilash
             await User.updateOne(
-                { telegramId: ctx.from.id },
+                { telegramId },
                 { $set: { lastActive: new Date() } }
             );
         } else {
-            setState(ctx.from.id, 'START');
+            // Yangi foydalanuvchi bo'lsa, telefon raqami so'raladi
+            setState(telegramId, 'START');
             await ctx.reply(
                 'Xush kelibsiz! Ro\'yxatdan o\'tish uchun telefon raqamingizni ulashing:',
                 contactKeyboard
             );
+
+            // Yangi foydalanuvchi yaratish va referal IDni saqlash
+            user = new User({
+                telegramId: telegramId,
+                username: ctx.from.username || null,
+                fullName: `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim(),
+                refferalId, // Referal ID saqlanadi
+                registrationDate: new Date(),
+                lastActive: new Date(),
+                isActive: true,
+            });
+
+            await user.save(); // Yangi foydalanuvchini bazaga qo'shish
         }
+
+        // Adminlarga xabar yuborish
         
-        await notifyAdmins(
-            `${user ? 'Mavjud' : 'Yangi'} foydalanuvchi: ${ctx.from.id} (${ctx.from.username || 'username yo\'q'})`,
-            'info'
-        );
     } catch (error) {
         console.error('Start command error:', error);
         await ctx.reply('Xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
     }
 });
 
-bot.command('stats', async (ctx) => {
-    if (!ctx.from || !ADMIN_IDS.includes(ctx.from.id.toString())) return;
-
-    try {
-        const totalUsers = await User.countDocuments();
-        const activeToday = await User.countDocuments({
-            lastActive: { 
-                $gte: new Date(new Date().setHours(0,0,0,0)) 
-            }
-        });
-        const activeThisWeek = await User.countDocuments({
-            lastActive: { 
-                $gte: new Date(new Date().setDate(new Date().getDate() - 7)) 
-            }
-        });
-
-        const message = `
-📊 Foydalanuvchilar statistikasi:
-👥 Jami ro'yxatdan o'tganlar: ${totalUsers}
-📅 Bugun faol: ${activeToday}
-📆 Haftalik faol: ${activeThisWeek}`;
-
-        await ctx.reply(message);
-    } catch (error) {
-        await ctx.reply('Statistikani olishda xatolik yuz berdi.');
-    }
-});
-
 // Contact Handler
 bot.on('contact', async (ctx) => {
     if (!ctx.from || !ctx.message.contact) return;
-    
+
     try {
         const userId = ctx.from.id;
         const contact = ctx.message.contact;
-        
-        const userData = {
-            telegramId: userId,
-            username: ctx.from.username || '',
-            fullName: `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim(),
-            phone: contact.phone_number,
-            registrationDate: new Date(),
-            lastActive: new Date(),
-            isActive: true
-        };
 
-        await saveUser(userData);
-        
-        setState(userId, 'MAIN_MENU', { phone: contact.phone_number });
-        await ctx.reply('Ro\'yxatdan o\'tish muvaffaqiyatli yakunlandi!', mainKeyboard);
-        
-        const adminMessage = `
-👤 Yangi ro'yxatdan o'tish:
-🆔 Telegram ID: ${userId}
-📱 Telefon: ${contact.phone_number}
-👤 To'liq ism: ${userData.fullName}
-${userData.username ? `Username: @${userData.username}` : ''}
-⏰ Sana: ${new Date().toLocaleString()}`;
-        
-        await notifyAdmins(adminMessage, 'success');
-        
+        // Foydalanuvchi mavjudligini tekshirish
+        let user = await User.findOne({ telegramId: userId });
+
+        if (user) {
+            // Telefon raqami yangilanadi
+            await User.updateOne(
+                { telegramId: userId },
+                { $set: { phone: contact.phone_number, lastActive: new Date() } }
+            );
+            setState(userId, 'MAIN_MENU');
+            await ctx.reply('Telefon raqamingiz muvaffaqiyatli yangilandi!', mainKeyboard);
+        } else {
+            // Yangi foydalanuvchi uchun ro'yxatdan o'tish
+            await ctx.reply('Avval ro\'yxatdan o\'tishingiz kerak. Iltimos, "start" komandasini ishlating.', mainKeyboard);
+        }
     } catch (error) {
         console.error('Contact handling error:', error);
         await ctx.reply('Ro\'yxatdan o\'tishda xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
     }
 });
+
 
 // Admin Handlers
 bot.hears('👤 Userlar', async (ctx) => {
@@ -566,7 +570,59 @@ bot.hears('📊 Transferlar', async (ctx) => {
 
 
 
+bot.hears('refferal', async (ctx) => {
+    if (!ctx.from) return;
 
+    await ctx.reply('Taklif qilish tugmasini bosing\n havolani do\'stlaringizga ulashing\nRefferal do\'stlaringiz uchun 1% oling!', refferalKeyboard);
+
+});
+
+bot.hears('Takliflarim', async (ctx) => {
+    if (!ctx.from) return; // Agar foydalanuvchi ma'lumotlari bo'lmasa, hech narsa qilmaydi
+
+    try {
+        const refferalId = ctx.from.id; // Foydalanuvchining ID-si
+
+        // Referallarni topish
+        const refferals = await User.find({ refferalId: refferalId });
+        const refferalCount = refferals.length; // Referal soni
+
+        let totalAmount = 0;
+
+        // Har bir referal uchun faqat "deposit" tranzaksiyalarni yig'ish
+        for (const refferal of refferals) {
+            const transactions = await Transaction.find({ 
+                telegramId: refferal.telegramId, 
+                type: 'deposit' // Faqat "deposit" turidagi tranzaksiyalarni oladi
+            });
+
+            for (const transaction of transactions) {
+                totalAmount += transaction.amount || 0; // Tranzaksiya summasini qo'shish
+            }
+        }
+
+        // Umumiy summaning 1 foizini hisoblash
+        const reward = (totalAmount * 0.01).toFixed(2);
+
+        // Natijani foydalanuvchiga yuborish
+        await ctx.reply(
+            `Sizning referallaringiz soni: ${refferalCount}\n` +
+            `Referallarning aylanmasi: ${totalAmount} so'm\n` +
+            `Sizning mukofotingiz: ${reward} so'm`
+        );
+    } catch (error) {
+        console.error('Xato:', error);
+        await ctx.reply('Kechirasiz, referal maʼlumotlarini olishda xatolik yuz berdi.');
+    }
+});
+
+
+bot.hears('Taklif Qilsh', async (ctx) => {
+    if (!ctx.from) return;
+    const link = `https://t.me/${ctx.me}?start=${ctx.from.id}`;
+    await ctx.reply(`SIMPLe Pay kassa orqali hisobni to'ldiring:\n${link}`, backKeyboard);
+
+});
 
 bot.hears('📥 Depositlar', async (ctx) => {
     const user = await User.findOne({ telegramId: ctx.from.id });
@@ -693,9 +749,9 @@ bot.hears('💰 Pul yechish', async (ctx) => {
     await ctx.reply('Platformani tanlang:', platformButtons);
 });
 
-bot.hears('Support', async (ctx) => {
+bot.hears('☎️ Aloqa', async (ctx) => {
     if (!ctx.from) return;
-    await ctx.reply('Admin bilan bog\'lanish: @Prostomilyarder', backKeyboard);
+    await ctx.reply('Admin bilan bog\'lanish: @bahodirMobcash', backKeyboard);
 });
 
 bot.hears('Qo\'llanma', async (ctx) => {
@@ -713,12 +769,12 @@ bot.hears('Qo\'llanma', async (ctx) => {
 1. Platformani tanlang
 2. Bokmeker IDingizni kiriting
 3. Hisobingizdan pul chiqarishda [Наличные]ni tanlang!
-4. QARSHI LT Textile (24/7)ni tanlang
+4. Kassa Manzilni tanlang
 5. Kodni oling va kiriting
 6. Karta raqamini kiriting
 7. Ma'lumotlarni tasdiqlang
 
-❗️ Muammo bo'lsa: @Prostomilyarder`;
+❗️Muammo bo'lsa: @bahodirMobcash`;
 
     await ctx.reply(manual, mainKeyboard);
 });
@@ -738,10 +794,16 @@ bot.action(/platform_(.+)/, async (ctx) => {
 
     if (userState.state === 'WITHDRAWAL_TYPE') {
         setState(ctx.from.id, 'WAITING_ID', { ...userState.data, platform });
-        await ctx.reply('ID raqamingizni kiriting:', backKeyboard);
+        await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
+            caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
+            reply_markup: backKeyboard
+          });
     } else if (userState.state === 'PAYOUT_TYPE') {
         setState(ctx.from.id, 'PAYOUT_WAITING_ID', { ...userState.data, platform });
-        await ctx.reply('ID raqamingizni kiriting:', backKeyboard);
+        await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
+            caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
+            reply_markup: backKeyboard
+          });
     } else {
         setState(ctx.from.id, 'MAIN_MENU');
         await ctx.reply('Asosiy menyu:', keyboard);
@@ -843,7 +905,7 @@ bot.on('text', async (ctx) => {
             case 'WAITING_ID':
                 try {
                     const gamer_data = await paymentClient.searchUser(text);
-                        console.log(gamer_data);
+                        
 
                         if (gamer_data.error && gamer_data.error.includes('Request failed with status code 400')) {
                             await ctx.reply('Noto\'g\'ri id . Iltimos, tekshirib ko\'ring.');
@@ -866,13 +928,17 @@ bot.on('text', async (ctx) => {
                     throw error;
                 }
                 break;
-
+                
             case 'WAITING_AMOUNT':
-                if (isNaN(text) || parseFloat(text) <= 0) {
-                    throw new Error('Noto\'g\'ri summa kiritildi');
+                const limit = config.LIMIT.LIMIT; 
+                if (isNaN(text) || parseFloat(text) <= limit) {
+                    throw new Error('Noto\'g\'ri summa minimal 10ming so\'m');
                 }
                 setState(userId, 'WAITING_CARD', { ...userState.data, amount: text });
-                await ctx.reply('Karta raqamini kiriting (masalan: 9860 0606 0304 0607):', backKeyboard);
+                await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/2', {
+                    caption: 'ℹ️ Karta raqamingizni kiriting\n 💳 Uzcard/Xumo raqami namunasi yuqoridagi suratta ko\'rsatilgan!',
+                    reply_markup: backKeyboard
+                  });
                 break;
 
             case 'WAITING_CARD':
@@ -891,7 +957,7 @@ bot.on('text', async (ctx) => {
                         const expiryDate = validateExpiryDate(text);
                 
                          // 10 soniya limit
-                        console.log(userState.data.cardNumber);
+                        
                         const cardTokenResponse = await clickApi.requestCardTokenWithTimeout(
                             userState.data.cardNumber,
                             expiryDate
@@ -984,7 +1050,8 @@ bot.on('text', async (ctx) => {
                 case 'PAYOUT_WAITING_ID':
                     try {
                         const gamer_data = await paymentClient.searchUser(text);
-                        console.log(gamer_data);
+                        
+                        
 
                         if (gamer_data.error && gamer_data.error.includes('Request failed with status code 400')) {
                             await ctx.reply('Noto\'g\'ri id . Iltimos, tekshirib ko\'ring.');
@@ -1004,8 +1071,7 @@ bot.on('text', async (ctx) => {
                         setState(userId, 'PAYOUT_WAITING_CODE', { ...userState.data, gameId: text });
                         const message = `
 🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
-👤 <b>Name:</b> ${gamer_data.Name}
-💵 <b>Balance:</b> ${gamer_data.Balance}`;
+👤 <b>Name:</b> ${gamer_data.Name}`;
                         await ctx.reply(message, { parse_mode: 'HTML' });
                         await ctx.reply('KODNI KIRITING:', backKeyboard);
                     } catch (error) {
@@ -1016,7 +1082,10 @@ bot.on('text', async (ctx) => {
 
                 case 'PAYOUT_WAITING_CODE':
                     setState(userId, 'PAYOUT_WAITING_CARD', { ...userState.data, code: text });
-                    await ctx.reply('Karta raqamingizni kiriting (masalan: 9860 0606 0304 0607):', backKeyboard);
+                    await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/2', {
+                        caption: 'ℹ️ Karta raqamingizni kiriting\n 💳 Uzcard/Xumo raqami namunasi yuqoridagi suratta ko\'rsatilgan!',
+                        reply_markup: backKeyboard
+                      });
                     break;
     
                 case 'PAYOUT_WAITING_CARD':
@@ -1075,6 +1144,8 @@ bot.on('text', async (ctx) => {
                                     ...payoutData
                                 });
                                 await withdrawal.save();
+
+                                const comission = await calculateModifiedValue(response.Summa);
                     
                                 // Notify admins about the payout request
                                 const adminMessage = `
@@ -1083,6 +1154,8 @@ bot.on('text', async (ctx) => {
 🎮 Platform: ${payoutData.platform}
 💳 Karta: ${payoutData.cardNumber}
 💰 Summa: ${payoutData.amount} UZS
+💰 To\'lang: ${comission} UZS
+🔑 Operation ID: ${payoutData.operationId}
 ⏰ Vaqt: ${new Date().toLocaleString()}
 📝 Status: ${payoutData.success ? 'Muvofaqiyatli' : 'Muvofaqiyatsiz'}
 📢 Xabar: ${payoutData.message}`;
@@ -1097,7 +1170,7 @@ bot.on('text', async (ctx) => {
                     
                                 // Reset user state to main menu after confirmation
                                 setState(userId, 'MAIN_MENU');
-                                await ctx.reply('❌ So\'rov bekor qilindi.', mainKeyboard);
+                                await ctx.reply( mainKeyboard);
                             } catch (error) {
                                 console.error('Withdrawal confirmation error:', error);
                                 await ctx.reply('❌ Xatolik yuz berdi. Qaytadan urinib ko\'ring.', mainKeyboard);
@@ -1124,7 +1197,7 @@ bot.on('text', async (ctx) => {
             }
         } catch (error) {
             console.error(`Error handling text: ${error.message}`);
-            await ctx.reply(`❌ Xatolik: ${error.message}\n\nQaytadan urinib ko'ring.`, backKeyboard);
+            await ctx.reply(`${error.message}\n\nQaytadan urinib ko'ring.`, backKeyboard);
         }
     });
     

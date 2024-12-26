@@ -21,6 +21,9 @@ const config = {
     DATABASE: {
         URI: process.env.MONGO_URI,
     },
+    LIMIT: {
+        LIMIT: Number(process.env.LIMIT),
+    },
 };
 
 module.exports = config;
