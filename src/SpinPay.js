@@ -145,6 +145,29 @@ class PaymentAPIClient {
     }
 
 
+    async kassaBalance() {
+        const dt = new Date().toISOString().replace('T', ' ').slice(0, 19); // UTC format: yyyy.MM.dd HH:mm:ss
+        const confirm = await this._generateMd5(`${this.cashdeskId}:${this.apiKey}`);
+
+        const signPart1 = await this._generateSha256(`hash=${this.apiKey}&cashierpass=${this.cashdeskPassword}&dt=${dt}`);
+        const signPart2 = await this._generateMd5(`dt=${dt}&cashierpass=${this.cashdeskPassword}&cashdeskid=${this.cashdeskId}`);
+        const sign = await this._generateSha256(signPart1 + signPart2);
+
+        const url = `${this.baseUrl}/CashdeskBotAPI/Cashdesk/${this.cashdeskId}/Balance?confirm=${confirm}&dt=${dt}`;
+
+        try {
+            const axios = require('axios');
+            const response = await axios.get(url, {
+                headers: { sign }
+            });
+            return response.data;
+        } catch (error) {
+            return {success: false, Balance: -1, error: error.message};
+        }
+    }
+
+
+
 
 }
 

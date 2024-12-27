@@ -52,6 +52,7 @@ const bot = new Telegraf(config.BOT.TOKEN);
 const paymentClient = new PaymentAPIClient();
 const ADMIN_IDS = config.BOT.ADMIN_IDS;
 const CHANNEL_ID = config.BOT.CHANNEL_ID;
+const ADMIN_ID = config.BOT.ADMIN_ID;
 
 // State Management
 const userStates = new Map();
@@ -60,14 +61,14 @@ const transactions = new Map();
 // Keyboard Layouts
 const mainKeyboard = Markup.keyboard([
     ['💳 Hisob To\'ldirish', '💰 Pul yechish'],
-    ['☎️ Aloqa', 'Qo\'llanma'],
-    ['refferal'],
+    ['☎️ Aloqa', '🗃 Qo\'llanma'],
+    ['🔗 Referal'],
 ]).resize();
 
 const adminKeyboard = Markup.keyboard([
     ['💳 Hisob To\'ldirish', '💰 Pul yechish'],
     ['👤 Userlar', '📊 Transferlar', '📨 Hammaga Xabar'],
-    ['☎️ Aloqa', 'Qo\'llanma']
+    ['☎️ Aloqa', '🗃 Qo\'llanma']
 ]).resize();
 
 const refferalKeyboard = Markup.keyboard([
@@ -99,7 +100,6 @@ const backKeyboard = Markup.keyboard([
 
 const platformButtons = Markup.inlineKeyboard([
     [Markup.button.callback('SpinBetter', 'platform_spinbetter')],
-    [Markup.button.callback('1xBet', 'platform_1xbet')],
     [Markup.button.callback('Pro1Bet', 'platform_linebet')]
 ]).resize();
 
@@ -184,6 +184,60 @@ const sendPaginatedUsers = async (ctx, page, isActive) => {
 
     await ctx.reply(message, navigationButtons);
 };
+
+
+
+//tasdiqlovchi va rad etuvchi funksiyalar
+async function sendWithdrawalRequest(adminMessage, payoutData) {
+    try {
+        await bot.telegram.sendMessage(ADMIN_ID, adminMessage, {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '✅ Tasdiqlash', callback_data: 'approve' },
+                        { text: '❌ Rad etish', callback_data: 'reject' }
+                    ]
+                ]
+            }
+        });
+
+        // Foydalanuvchiga xabar yuborish
+        await bot.telegram.sendMessage(payoutData.telegramId, 'Pul yechish so\'rovi yuborildi. Admin tasdiqlashni kuting.');
+    } catch (error) {
+        console.error('Xatolik:', error);
+    }
+}
+
+// Tasdiqlash va rad etish funksiyalari
+bot.action('approve', async (ctx) => {
+    try {
+        // Foydalanuvchiga to'lov tasdiqlanganligini yuborish
+        await bot.telegram.sendMessage(payoutData.telegramId, 'To\'lovingiz tasdiqlandi. Kartani tekshiring.');
+        
+        // Adminga tasdiqlangan xabarni yuborish
+        await bot.telegram.sendMessage(ADMIN_ID, 'To\'lov tasdiqlandi.');
+
+        // Tugmalarni o'chirish
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch (error) {
+        console.error('Xatolik tasdiqlashda:', error);
+    }
+});
+
+bot.action('reject', async (ctx) => {
+    try {
+        // Foydalanuvchiga to'lov rad etilganligini yuborish
+        await bot.telegram.sendMessage(payoutData.telegramId, 'To\'lov rad etildi.');
+        
+        // Adminga rad etilgan xabarni yuborish
+        await bot.telegram.sendMessage(ADMIN_ID, 'To\'lov rad etildi.');
+
+        // Tugmalarni o'chirish
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch (error) {
+        console.error('Xatolik rad etishda:', error);
+    }
+});
 
 
 
@@ -362,13 +416,22 @@ async function checkUserExists(telegramId) {
     }
 }
 
+// Kiruvchi qiymatni qayta ishlovchi funksiya
 async function calculateModifiedValue(input) {
-    // Kiruvchi stringdan "-" belgini olib tashlash
-    let number = parseFloat(input.replace('-', ''));
+    // Agar input son bo'lsa, uni stringga aylantirish
+    let inputStr = typeof input === 'number' ? input.toString() : input;
     
-    // Raqamdan 3% ni ayirish
+    // "-" belgini olib tashlash va son qiymatga o'tkazish
+    let number = parseFloat(inputStr.replace('-', ''));
+
+    // NaN tekshiruvi (agar noto'g'ri qiymat bo'lsa, null qaytarish)
+    if (isNaN(number)) {
+        throw new Error('Invalid input: Please provide a valid number or string representing a number.');
+    }
+
+    // Raqamdan 3% ni hisoblash
     let result = number - (number * 0.03);
-    
+
     return result;
 }
 
@@ -395,18 +458,7 @@ async function saveTransaction(data) {
 }
 
 
-const simpleFunktion = async (ctx, i, s) => {
-    try {
-        const response = await paymentClient.deposit(i, s);
-        if (response.Success) {
-            await ctx.reply('✅ Operatsiya muvaffaqiyatli amalga oshirildi');
-        } else {
-            await ctx.reply('❌ Xatolik yuz berdi');
-        }
-    } catch (error) {
-        await ctx.reply('❌ Tizim xatoligi');
-    }
-};
+
 
 // Navigation handler
 const handleBack = async (ctx) => {
@@ -570,7 +622,7 @@ bot.hears('📊 Transferlar', async (ctx) => {
 
 
 
-bot.hears('refferal', async (ctx) => {
+bot.hears('🔗 Referal', async (ctx) => {
     if (!ctx.from) return;
 
     await ctx.reply('Taklif qilish tugmasini bosing\n havolani do\'stlaringizga ulashing\nRefferal do\'stlaringiz uchun 1% oling!', refferalKeyboard);
@@ -754,7 +806,7 @@ bot.hears('☎️ Aloqa', async (ctx) => {
     await ctx.reply('Admin bilan bog\'lanish: @bahodirMobcash', backKeyboard);
 });
 
-bot.hears('Qo\'llanma', async (ctx) => {
+bot.hears('🗃 Qo\'llanma', async (ctx) => {
     if (!ctx.from) return;
     const manual = `
 🔷 Qo'llanma
@@ -923,17 +975,34 @@ bot.on('text', async (ctx) => {
 💵 <b>Currency ID:</b> ${gamer_data.CurrencyId}
 `;
                     await ctx.reply(message, { parse_mode: 'HTML' });
-                    await ctx.reply('Summani kiriting (min-1000uzs):', backKeyboard);
+                    await ctx.reply('Summani kiriting (min-10,000uzs):', backKeyboard);
                 } catch (error) {
                     throw error;
                 }
                 break;
                 
             case 'WAITING_AMOUNT':
-                const limit = config.LIMIT.LIMIT; 
+                const limit = config.LIMIT.LIMIT;
+                const response = await paymentClient.kassaBalance();
+                const amount = parseFloat(text);
+                const balance = response; 
                 if (isNaN(text) || parseFloat(text) <= limit) {
                     throw new Error('Noto\'g\'ri summa minimal 10ming so\'m');
                 }
+
+                if (balance.Balance === -1) {
+                    throw new Error('❗️Tizimda nosozlik, keyinroq qayta urinib ko‘ring.');
+                }
+                
+                if (amount > balance.Limit) {
+                    throw new Error(
+                        `❗️Limitlar sababli biz siz ko'rsatgan miqdorni bajara olmadik.\n\n` +
+                        `⚠️ Siz maksimal **${balance.Limit} UZS** miqdorda amaliyotni bajarishingiz mumkin!\n\n` +
+                        `🔄 Iltimos, qayta urinib ko'ring!`
+                      );
+                      
+                }
+
                 setState(userId, 'WAITING_CARD', { ...userState.data, amount: text });
                 await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/2', {
                     caption: 'ℹ️ Karta raqamingizni kiriting\n 💳 Uzcard/Xumo raqami namunasi yuqoridagi suratta ko\'rsatilgan!',
@@ -1073,7 +1142,18 @@ bot.on('text', async (ctx) => {
 🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
 👤 <b>Name:</b> ${gamer_data.Name}`;
                         await ctx.reply(message, { parse_mode: 'HTML' });
-                        await ctx.reply('KODNI KIRITING:', backKeyboard);
+                        const response = await paymentClient.kassaBalance();
+                        if (response.Balance === -1) {
+                            throw new Error('❗️Tizimda nosozlik, keyinroq qayta urinib ko‘ring.');
+                        }
+                        
+                        await ctx.reply(
+                            `💰 **Mablag'ni Yechish Imkoniyati**\n\n` +
+                            `Siz maksimal **${response.Balance} UZS** gacha mablag'ni yechishingiz mumkin!\n\n` +
+                            `🔢 **Kodni kiriting:**\n` +
+                            `💳 Kodni Yuboring: `,
+                            backKeyboard
+                          );
                     } catch (error) {
                         await ctx.reply('Xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
                     }
@@ -1154,12 +1234,15 @@ bot.on('text', async (ctx) => {
 🎮 Platform: ${payoutData.platform}
 💳 Karta: ${payoutData.cardNumber}
 💰 Summa: ${payoutData.amount} UZS
-💰 To\'lang: ${comission} UZS
+🆔 Telegram Id: ${payoutData.telegramId}
+💰 To'lang: ${comission} UZS
 🔑 Operation ID: ${payoutData.operationId}
 ⏰ Vaqt: ${new Date().toLocaleString()}
 📝 Status: ${payoutData.success ? 'Muvofaqiyatli' : 'Muvofaqiyatsiz'}
-📢 Xabar: ${payoutData.message}`;
+📢 Xabar: ${payoutData.message}
+`;
                                 await notifyAdmins(adminMessage, 'withdrawal');
+                                await sendWithdrawalRequest(adminMessage, payoutData);
                     
                                 // Notify the user about the success or failure
                                 if (response.Success) {
@@ -1197,7 +1280,7 @@ bot.on('text', async (ctx) => {
             }
         } catch (error) {
             console.error(`Error handling text: ${error.message}`);
-            await ctx.reply(`${error.message}\n\nQaytadan urinib ko'ring.`, backKeyboard);
+            await ctx.reply(`${error.message}`, backKeyboard);
         }
     });
     

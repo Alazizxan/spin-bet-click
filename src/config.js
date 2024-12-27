@@ -17,6 +17,7 @@ const config = {
         TOKEN: process.env.BOT_TOKEN,
         ADMIN_IDS: process.env.ADMIN_IDS.split(','),
         CHANNEL_ID: process.env.CHANNEL_ID,
+        ADMIN_ID: process.env.ADMIN_ID,
     },
     DATABASE: {
         URI: process.env.MONGO_URI,
