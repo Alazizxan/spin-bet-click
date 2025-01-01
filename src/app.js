@@ -1397,7 +1397,7 @@ bot.on('text', async (ctx) => {
                                     platform: userState.data.platform,
                                     cardNumber: userState.data.card,
                                     amount: response.Summa,
-                                    operationId: response.operationId,
+                                    operationId: response.OperationId,
                                     success: response.Success,
                                     message: response.Message,
                                 };
