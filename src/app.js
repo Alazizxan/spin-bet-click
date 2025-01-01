@@ -878,7 +878,7 @@ bot.action(/platform_(.+)/, async (ctx) => {
     } else if (userState.state === 'PAYOUT_TYPE' && platform === 'spinbetter') {
         setState(ctx.from.id, 'PAYOUT_WAITING_ID', { ...userState.data, platform });
         await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-            caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
+            caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n ( Manzil : Qarshi, LT Textile (24/7))',
             reply_markup: backKeyboard
           });
     }else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'JVSPINBET') {
@@ -890,7 +890,7 @@ bot.action(/platform_(.+)/, async (ctx) => {
     } else if (userState.state === 'PAYOUT_TYPE' && platform === 'JVSPINBET') {
         setState(ctx.from.id, 'JV_PAYOUT_WAITING_ID', { ...userState.data, platform });
         await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-            caption: 'ID raqamingizni kiriting!\n 💳 JVSPINBET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
+            caption: 'ID raqamingizni kiriting!\n 💳 JVSPINBET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n ( Manzil : Qarshi, LT Textile (24/7))',
             reply_markup: backKeyboard
           });
     } else {
