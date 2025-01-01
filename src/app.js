@@ -865,7 +865,7 @@ bot.action(/platform_(.+)/, async (ctx) => {
     await ctx.deleteMessage();
 
     if (platform == 'linebet') {
-        await ctx.reply('Hozzircha Hisobingizni admin orqali to\'ldirish va Yechishingiz mumkin  .');
+        await ctx.reply('Hozzircha Hisobingizni admin orqali to\'ldirish va Yechishingiz mumkin @bahodirMobcash .');
         return;
     }
 
