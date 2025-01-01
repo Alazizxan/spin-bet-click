@@ -852,7 +852,10 @@ bot.hears('🗃 Qo\'llanma', async (ctx) => {
 7. Ma'lumotlarni tasdiqlang
 
 ❗️Muammo bo'lsa: @bahodirMobcash`;
-
+    await ctx.telegram.sendVideo(ctx.chat.id, 'https://t.me/simplepay_uz/5', {
+        caption: 'Qo\'llanma pul yechish uchun Spinbetter\n manzil: Qarshi, LT Textile (24/7)\n Pul yechish avto Bot 24/7 xizmat ko\'rsatadi',});
+    await ctx.telegram.sendVideo(ctx.chat.id, 'https://t.me/simplepay_uz/4', {
+        caption: 'Qo\'llanma Hisob to\'ldirish uchun!\n Hisob to\'ldirish avto Bot 24/7 xizmat ko\'rsatadi',});
     await ctx.reply(manual, mainKeyboard);
 });
 
