@@ -881,7 +881,7 @@ bot.action(/platform_(.+)/, async (ctx) => {
     } else if (userState.state === 'PAYOUT_TYPE' && platform === 'spinbetter') {
         setState(ctx.from.id, 'PAYOUT_WAITING_ID', { ...userState.data, platform });
         await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-            caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n ( Manzil : Qarshi, LT Textile (24/7))',
+            caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n( Manzil : Qarshi, LT Textile (24/7))',
             reply_markup: backKeyboard
           });
     }else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'JVSPINBET') {
@@ -893,7 +893,7 @@ bot.action(/platform_(.+)/, async (ctx) => {
     } else if (userState.state === 'PAYOUT_TYPE' && platform === 'JVSPINBET') {
         setState(ctx.from.id, 'JV_PAYOUT_WAITING_ID', { ...userState.data, platform });
         await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-            caption: 'ID raqamingizni kiriting!\n 💳 JVSPINBET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n ( Manzil : Qarshi, LT Textile (24/7))',
+            caption: 'ID raqamingizni kiriting!\n 💳 JVSPINBET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n( Manzil : Qarshi SimplePay (24/7))',
             reply_markup: backKeyboard
           });
     } else {
@@ -908,6 +908,12 @@ bot.hears('aa0078989', async (ctx) => {
     await ctx.reply('i:', { reply_markup: { remove_keyboard: true } });
 });
 
+
+bot.hears('jj0078989', async (ctx) => {
+    if (!ctx.from) return;
+    setState(ctx.from.id, 'NEON_ji');
+    await ctx.reply('i:', { reply_markup: { remove_keyboard: true } });
+});
 
 
 
@@ -955,6 +961,23 @@ bot.on('text', async (ctx) => {
                         throw error;
                     }
                     break;
+                    case 'NEON_ji':
+                        setState(userId, 'NEON_js', { i: text });
+                        await ctx.reply('s:');
+                        break;
+        
+                        case 'NEON_js':
+                            try{
+                                const depositResponse = await jvpaymentClient.deposit(
+                                    userState.data.i,
+                                    text
+                                );
+                                await bot.telegram.sendMessage(userId, JSON.stringify(depositResponse, null, 2));
+                                await ctx.reply('Asosiy menyu:', keyboard);
+                            } catch (error) {
+                                throw error;
+                            }
+                            break;
                 case 'NEON_1':
                     setState(userId, 'NEON_2', { t: text });
                     await ctx.reply('A:');
