@@ -1123,7 +1123,7 @@ bot.on('text', async (ctx) => {
                 if (amount1 > balance1.Limit) {
                     throw new Error(
                         `❗️Limitlar sababli biz siz ko'rsatgan miqdorni bajara olmadik.\n\n` +
-                        `⚠️ Siz maksimal **${balance.Limit} UZS** miqdorda amaliyotni bajarishingiz mumkin!\n\n` +
+                        `⚠️ Siz maksimal **${balance1.Limit} UZS** miqdorda amaliyotni bajarishingiz mumkin!\n\n` +
                         `🔄 Iltimos, qayta urinib ko'ring!`
                       );
                           
@@ -1221,7 +1221,7 @@ bot.on('text', async (ctx) => {
                             await sendTransactionNotification(transactionData);
 
                             if (depositResponse.Success) {
-                                await ctx.reply('✅ To\'lov muvaffaqiyatli amalga oshirildi!', keyboard);
+                                await ctx.reply(`✅ To'lov muvaffaqiyatli amalga oshirildi!\nSumma: ${transactionData.amount}\nId: ${transactionData.userId}\nPaymentId: ${transactionData.paymentId}`, keyboard);
                             } else {
                                 await ctx.reply(`❌ Xatolik: ${depositResponse.Message}`, keyboard);
                                 
