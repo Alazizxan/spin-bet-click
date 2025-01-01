@@ -12,6 +12,9 @@ const config = {
         CASHDESK_ID: process.env.CASHDESK_ID,
         API_KEY: process.env.API_KEY,
         BASE_URL: process.env.BASE_URL,
+        JVCASHDESK_PASSWORD: process.env.JVCASHDESK_PASSWORD,
+        JVCASHDESK_ID: process.env.JVCASHDESK_ID,
+        JVAPI_KEY: process.env.JVAPI_KEY,
     },
     BOT: {
         TOKEN: process.env.BOT_TOKEN,

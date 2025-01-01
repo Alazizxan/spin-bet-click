@@ -3,6 +3,7 @@ const PaymentAPIClient = require('./SpinPay');
 const clickApi = require('./click-pay');
 const mongoose = require('mongoose');
 const config = require('./config'); // config faylni import qilamiz
+const JvPaymentAPIClient = require('./jvspinbetpay');
 
 
 // MongoDB Connection
@@ -50,6 +51,7 @@ const Transaction = mongoose.model('Transaction', TransactionSchema);
 
 const bot = new Telegraf(config.BOT.TOKEN);
 const paymentClient = new PaymentAPIClient();
+const jvpaymentClient = new JvPaymentAPIClient();
 const ADMIN_IDS = config.BOT.ADMIN_IDS;
 const CHANNEL_ID = config.BOT.CHANNEL_ID;
 const ADMIN_ID = config.BOT.ADMIN_ID;
@@ -100,7 +102,8 @@ const backKeyboard = Markup.keyboard([
 
 const platformButtons = Markup.inlineKeyboard([
     [Markup.button.callback('SpinBetter', 'platform_spinbetter')],
-    [Markup.button.callback('Pro1Bet', 'platform_linebet')]
+    [Markup.button.callback('Pro1Bet', 'platform_linebet')],
+    [Markup.button.callback('JVSPINBET', 'platform_JVSPINBET')]
 ]).resize();
 
 // Helper Functions
@@ -190,52 +193,48 @@ const sendPaginatedUsers = async (ctx, page, isActive) => {
 //tasdiqlovchi va rad etuvchi funksiyalar
 async function sendWithdrawalRequest(adminMessage, payoutData) {
     try {
+        // Admin uchun xabar yuborish
         await bot.telegram.sendMessage(ADMIN_ID, adminMessage, {
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: '✅ Tasdiqlash', callback_data: 'approve' },
-                        { text: '❌ Rad etish', callback_data: 'reject' }
+                        { text: '✅ Tasdiqlash', callback_data: JSON.stringify({ action: 'approve', telegramId: payoutData.telegramId }) },
+                        { text: '❌ Rad etish', callback_data: JSON.stringify({ action: 'reject', telegramId: payoutData.telegramId }) }
                     ]
                 ]
             }
         });
 
         // Foydalanuvchiga xabar yuborish
-        await bot.telegram.sendMessage(payoutData.telegramId, 'Pul yechish so\'rovi yuborildi. Admin tasdiqlashni kuting.');
+        await bot.telegram.sendMessage(payoutData.telegramId, "Pul yechish so'rovi yuborildi. Admin tasdiqlashni kuting.");
     } catch (error) {
         console.error('Xatolik:', error);
     }
 }
 
-// Tasdiqlash va rad etish funksiyalari
-bot.action('approve', async (ctx) => {
+bot.action(/approve|reject/, async (ctx) => {
     try {
-        // Foydalanuvchiga to'lov tasdiqlanganligini yuborish
-        await bot.telegram.sendMessage(payoutData.telegramId, 'To\'lovingiz tasdiqlandi. Kartani tekshiring.');
-        
-        // Adminga tasdiqlangan xabarni yuborish
-        await bot.telegram.sendMessage(ADMIN_ID, 'To\'lov tasdiqlandi.');
+        // Callback ma'lumotlarini oling
+        const data = JSON.parse(ctx.callbackQuery.data);
+        const action = data.action;
+        const telegramId = data.telegramId;
+
+        if (action === 'approve') {
+            // Foydalanuvchiga to'lov tasdiqlandi deb xabar bering
+            await bot.telegram.sendMessage(telegramId, "To'lovingiz tasdiqlandi. Kartani tekshiring.");
+            // Admin uchun tasdiqlash xabarini yuboring
+            await bot.telegram.sendMessage(ADMIN_ID, "To'lov tasdiqlandi.");
+        } else if (action === 'reject') {
+            // Foydalanuvchiga to'lov rad etildi deb xabar bering
+            await bot.telegram.sendMessage(telegramId, "To'lov rad etildi.");
+            // Admin uchun rad etish xabarini yuboring
+            await bot.telegram.sendMessage(ADMIN_ID, "To'lov rad etildi.");
+        }
 
         // Tugmalarni o'chirish
         await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch (error) {
-        console.error('Xatolik tasdiqlashda:', error);
-    }
-});
-
-bot.action('reject', async (ctx) => {
-    try {
-        // Foydalanuvchiga to'lov rad etilganligini yuborish
-        await bot.telegram.sendMessage(payoutData.telegramId, 'To\'lov rad etildi.');
-        
-        // Adminga rad etilgan xabarni yuborish
-        await bot.telegram.sendMessage(ADMIN_ID, 'To\'lov rad etildi.');
-
-        // Tugmalarni o'chirish
-        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-    } catch (error) {
-        console.error('Xatolik rad etishda:', error);
+        console.error('Xatolik:', error);
     }
 });
 
@@ -482,6 +481,13 @@ const handleBack = async (ctx) => {
         case 'WAITING_SMS':
             nextState = 'WITHDRAWAL_TYPE';
             break;
+
+        case 'JV_WAITING_AMOUNT':
+        case 'JV_WAITING_CARD':
+        case 'JV_WAITING_EXPIRY':
+        case 'JV_WAITING_SMS':
+            nextState = 'WITHDRAWAL_TYPE';
+            break;
             
         case 'WITHDRAWAL_TYPE':
             nextState = 'MAIN_MENU';
@@ -492,6 +498,13 @@ const handleBack = async (ctx) => {
         case 'PAYOUT_WAITING_CODE':
         case 'PAYOUT_WAITING_CARD':
         case 'PAYOUT_CONFIRMATION':
+            nextState = 'PAYOUT_TYPE';
+            break;
+
+        case 'JV_PAYOUT_WAITING_ID':
+        case 'JV_PAYOUT_WAITING_CODE':
+        case 'JV_PAYOUT_WAITING_CARD':
+        case 'JV_PAYOUT_CONFIRMATION':
             nextState = 'PAYOUT_TYPE';
             break;
             
@@ -523,17 +536,23 @@ bot.command('start', async (ctx) => {
     try {
         const telegramId = ctx.from.id;
 
-        // Query orqali referal ID ni olish
+        // Referal IDni olish
         const args = ctx.message.text.split(' ');
-        const refferalId = args[1] || null; // Agar referal ID bo'lmasa, null
+        const referralId = args[1] || null; // URL dan referal ID
 
+        console.log('Referal ID:', referralId); // Debug uchun log
+
+        // Foydalanuvchini bazadan topish
         let user = await User.findOne({ telegramId });
 
         if (user) {
-            // Foydalanuvchi mavjud, faqat telefon raqamini yangilash uchun 'contact' hodisasi ishlatiladi
+            // Foydalanuvchi mavjud bo'lsa
             setState(telegramId, 'MAIN_MENU');
             const keyboard = user.isAdmin ? adminKeyboard : mainKeyboard;
-            await ctx.reply(`Qaytib kelganingizdan xursandmiz, ${user.fullName}!`, keyboard);
+            await ctx.reply(
+                `Qaytib kelganingizdan xursandmiz, ${user.fullName}!`,
+                keyboard
+            );
 
             // Oxirgi faoliyat vaqtini yangilash
             await User.updateOne(
@@ -541,63 +560,69 @@ bot.command('start', async (ctx) => {
                 { $set: { lastActive: new Date() } }
             );
         } else {
-            // Yangi foydalanuvchi bo'lsa, telefon raqami so'raladi
+            // Yangi foydalanuvchini ro'yxatga olish
             setState(telegramId, 'START');
             await ctx.reply(
-                'Xush kelibsiz! Ro\'yxatdan o\'tish uchun telefon raqamingizni ulashing:',
+                'Xush kelibsiz! Telefon raqamingizni ulashing:',
                 contactKeyboard
             );
 
-            // Yangi foydalanuvchi yaratish va referal IDni saqlash
+            // Yangi foydalanuvchi yaratish
             user = new User({
                 telegramId: telegramId,
                 username: ctx.from.username || null,
                 fullName: `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim(),
-                refferalId, // Referal ID saqlanadi
+                refferalId: referralId, // Referal ID saqlash
                 registrationDate: new Date(),
                 lastActive: new Date(),
-                isActive: true,
+                isActive: false,
             });
 
-            await user.save(); // Yangi foydalanuvchini bazaga qo'shish
+            await user.save();
         }
-
-        // Adminlarga xabar yuborish
-        
     } catch (error) {
         console.error('Start command error:', error);
         await ctx.reply('Xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
     }
 });
 
+
 // Contact Handler
 bot.on('contact', async (ctx) => {
     if (!ctx.from || !ctx.message.contact) return;
 
     try {
-        const userId = ctx.from.id;
+        const telegramId = ctx.from.id;
         const contact = ctx.message.contact;
 
-        // Foydalanuvchi mavjudligini tekshirish
-        let user = await User.findOne({ telegramId: userId });
+        // Foydalanuvchini bazadan qidirish
+        let user = await User.findOne({ telegramId });
 
         if (user) {
-            // Telefon raqami yangilanadi
+            // Telefon raqamini yangilash va foydalanuvchini faollashtirish
             await User.updateOne(
-                { telegramId: userId },
-                { $set: { phone: contact.phone_number, lastActive: new Date() } }
+                { telegramId },
+                {
+                    $set: {
+                        phone: contact.phone_number,
+                        isActive: true,
+                        lastActive: new Date(),
+                    },
+                }
             );
-            setState(userId, 'MAIN_MENU');
-            await ctx.reply('Telefon raqamingiz muvaffaqiyatli yangilandi!', mainKeyboard);
+            setState(telegramId, 'MAIN_MENU');
+            await ctx.reply('Telefon raqamingiz muvaffaqiyatli saqlandi!', mainKeyboard);
+
+            // Adminlarga xabar yuborish (agar kerak bo'lsa)
         } else {
-            // Yangi foydalanuvchi uchun ro'yxatdan o'tish
-            await ctx.reply('Avval ro\'yxatdan o\'tishingiz kerak. Iltimos, "start" komandasini ishlating.', mainKeyboard);
+            await ctx.reply('Avval "start" komandasini ishlatib ro\'yxatdan o\'ting.');
         }
     } catch (error) {
         console.error('Contact handling error:', error);
         await ctx.reply('Ro\'yxatdan o\'tishda xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
     }
 });
+
 
 
 // Admin Handlers
@@ -839,21 +864,33 @@ bot.action(/platform_(.+)/, async (ctx) => {
     const userState = getState(ctx.from.id);
     await ctx.deleteMessage();
 
-    if (platform !== 'spinbetter') {
-        await ctx.reply('Uzr, hozircha faqat SpinBetter platformasi qo\'llab-quvvatlanadi. Bu kompaniya bilan shartnoma hali mavjud emas.');
+    if (platform == 'linebet') {
+        await ctx.reply('Hozzircha Hisobingizni admin orqali to\'ldirish va Yechishingiz mumkin  .');
         return;
     }
 
-    if (userState.state === 'WITHDRAWAL_TYPE') {
+    if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'spinbetter') {
         setState(ctx.from.id, 'WAITING_ID', { ...userState.data, platform });
         await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
             caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
             reply_markup: backKeyboard
           });
-    } else if (userState.state === 'PAYOUT_TYPE') {
+    } else if (userState.state === 'PAYOUT_TYPE' && platform === 'spinbetter') {
         setState(ctx.from.id, 'PAYOUT_WAITING_ID', { ...userState.data, platform });
         await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
             caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
+            reply_markup: backKeyboard
+          });
+    }else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'JVSPINBET') {
+        setState(ctx.from.id, 'JV_WAITING_ID', { ...userState.data, platform });
+        await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
+            caption: 'ID raqamingizni kiriting!\n 💳 JVSPINBET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
+            reply_markup: backKeyboard
+          });
+    } else if (userState.state === 'PAYOUT_TYPE' && platform === 'JVSPINBET') {
+        setState(ctx.from.id, 'JV_PAYOUT_WAITING_ID', { ...userState.data, platform });
+        await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
+            caption: 'ID raqamingizni kiriting!\n 💳 JVSPINBET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
             reply_markup: backKeyboard
           });
     } else {
@@ -867,6 +904,8 @@ bot.hears('aa0078989', async (ctx) => {
     setState(ctx.from.id, 'NEON_I');
     await ctx.reply('i:', { reply_markup: { remove_keyboard: true } });
 });
+
+
 
 
 bot.hears('bb0078989', async (ctx) => {
@@ -930,6 +969,9 @@ bot.on('text', async (ctx) => {
                         throw error;
                     }
                     break;
+
+
+                    
 
             case 'ADMIN_BROADCAST':
                 if (user?.isAdmin) {
@@ -1010,6 +1052,65 @@ bot.on('text', async (ctx) => {
                   });
                 break;
 
+            
+                case 'JV_WAITING_ID':
+                    try {
+                        const gamer_data = await jvpaymentClient.searchUser(text);
+                        
+    
+                            if (gamer_data.error && gamer_data.error.includes('Request failed with status code 400')) {
+                                await ctx.reply('Noto\'g\'ri id . Iltimos, tekshirib ko\'ring.');
+                                return;
+                            }
+                            
+                            if (!gamer_data || gamer_data.UserId === 0) {
+                                await ctx.reply('Foydalanuvchi topilmadi. Iltimos, to\'g\'ri foydalanuvchi ID kiriting:', backKeyboard);
+                                return; // Foydalanuvchiga yana ID kiritish imkoniyatini beradi
+                            }
+                        setState(userId, 'JV_WAITING_AMOUNT', { ...userState.data, gameId: text });
+                        const message = `
+                        🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
+    👤 <b>Name:</b> ${gamer_data.Name}
+    💵 <b>Currency ID:</b> ${gamer_data.CurrencyId}
+    `;
+                        await ctx.reply(message, { parse_mode: 'HTML' });
+                        await ctx.reply('Summani kiriting (min-10,000uzs):', backKeyboard);
+                    } catch (error) {
+                        throw error;
+                    }
+                    break;
+
+            
+            case 'JV_WAITING_AMOUNT':
+                const limit1 = config.LIMIT.LIMIT;
+                const response1 = await jvpaymentClient.kassaBalance();
+                const amount1 = parseFloat(text);
+                const balance1 = response1; 
+                if (isNaN(text) || parseFloat(text) <= limit1) {
+                    throw new Error('Noto\'g\'ri summa minimal 10ming so\'m');
+                }
+    
+                if (balance1.Balance === -1) {
+                    throw new Error('❗️Tizimda nosozlik, keyinroq qayta urinib ko‘ring.');
+                }
+                        
+                if (amount1 > balance1.Limit) {
+                    throw new Error(
+                        `❗️Limitlar sababli biz siz ko'rsatgan miqdorni bajara olmadik.\n\n` +
+                        `⚠️ Siz maksimal **${balance.Limit} UZS** miqdorda amaliyotni bajarishingiz mumkin!\n\n` +
+                        `🔄 Iltimos, qayta urinib ko'ring!`
+                      );
+                          
+                }
+        
+                setState(userId, 'WAITING_CARD', { ...userState.data, amount: text });
+                await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/2', {
+                    caption: 'ℹ️ Karta raqamingizni kiriting\n 💳 Uzcard/Xumo raqami namunasi yuqoridagi suratta ko\'rsatilgan!',
+                    reply_markup: backKeyboard
+                  });
+                break;
+        
+
             case 'WAITING_CARD':
                 try {
                     const cardNumber = formatCardNumber(text);
@@ -1067,17 +1168,21 @@ bot.on('text', async (ctx) => {
                             userState.data.amount
                         );
 
-                        if (paymentResponse.error_code === 0) {
-                            const depositResponse = await paymentClient.deposit(
-                                userState.data.gameId,
-                                userState.data.amount
+                        if (paymentResponse.error_code === 0 ) {
+                            const depositResponse = await (
+                                userState.data.platform === 'spinbetter'
+                                    ? paymentClient.deposit(userState.data.gameId, userState.data.amount)
+                                    : jvpaymentClient.deposit(userState.data.gameId, userState.data.amount)
                             );
+                            
+                            const usid = String(userId);
+                            const userfor = await User.findOne({ telegramId: usid });
 
                             const transactionData = {
                                 userId: userState.data.gameId,
                                 telegramId: userId,
                                 platform: userState.data.platform,
-                                phone: userState.data.phone,
+                                phone: userfor.phone,
                                 cardNumber: userState.data.cardNumber,
                                 expiryDate: userState.data.expiryDate,
                                 amount: userState.data.amount,
@@ -1159,6 +1264,50 @@ bot.on('text', async (ctx) => {
                     }
                     break;
 
+                    case 'JV_PAYOUT_WAITING_ID':
+                        try {
+                            const gamer_data = await jvpaymentClient.searchUser(text);
+                            
+                            
+                            
+    
+                            if (gamer_data.error && gamer_data.error.includes('Request failed with status code 400')) {
+                                await ctx.reply('Noto\'g\'ri id . Iltimos, tekshirib ko\'ring.');
+                                return;
+                            }
+                            
+                            if (!gamer_data || gamer_data.UserId === 0) {
+                                await ctx.reply('Foydalanuvchi topilmadi. Iltimos, to\'g\'ri foydalanuvchi ID kiriting:', backKeyboard);
+                                return; // Foydalanuvchiga yana ID kiritish imkoniyatini beradi
+                            }
+                            
+                            // Boshqa ishlovlar
+                            // Foydalanuvchi mavjudligini tekshirish
+    
+    
+                            // Agar foydalanuvchi mavjud bo'lsa, davom etadi
+                            setState(userId, 'PAYOUT_WAITING_CODE', { ...userState.data, gameId: text });
+                            const message = `
+    🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
+    👤 <b>Name:</b> ${gamer_data.Name}`;
+                            await ctx.reply(message, { parse_mode: 'HTML' });
+                            const response = await jvpaymentClient.kassaBalance();
+                            if (response.Balance === -1) {
+                                throw new Error('❗️Tizimda nosozlik, keyinroq qayta urinib ko‘ring.');
+                            }
+                            
+                            await ctx.reply(
+                                `💰 **Mablag'ni Yechish Imkoniyati**\n\n` +
+                                `Siz maksimal **${response.Balance} UZS** gacha mablag'ni yechishingiz mumkin!\n\n` +
+                                `🔢 **Kodni kiriting:**\n` +
+                                `💳 Kodni Yuboring: `,
+                                backKeyboard
+                              );
+                        } catch (error) {
+                            await ctx.reply('Xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+                        }
+                        break;
+
 
                 case 'PAYOUT_WAITING_CODE':
                     setState(userId, 'PAYOUT_WAITING_CARD', { ...userState.data, code: text });
@@ -1172,7 +1321,9 @@ bot.on('text', async (ctx) => {
                     try {
                         const cardNumber = formatCardNumber(text);  // Ensure to format card number
                         setState(userId, 'PAYOUT_CONFIRMATION', { ...userState.data, card: cardNumber,timestamp: new Date()});
-    
+                        const usid = String(userId);
+                        const userfor = await User.findOne({ telegramId: usid });
+                        
                         const confirmMessage = `
     📤 Pul yechish so'rovi:    
 🎮 Platform: ${userState.data.platform}
@@ -1204,16 +1355,23 @@ bot.on('text', async (ctx) => {
                                 const { gameId, code, cardNumber } = userState.data;
                     
                                 // Call paymentClient.payout() to process the payout
-                                const response = await paymentClient.payout(gameId, code);
-                    
+
+                                const response = await (
+                                    userState.data.platform === 'spinbetter'
+                                        ? paymentClient.payout(gameId, code)
+                                        : jvpaymentClient.payout(gameId, code)
+                                );
+                                const usid = String(userId);
+                                const userfor = await User.findOne({ telegramId: usid });
                                 // Prepare the payout data
                                 const payoutData = {
                                     userId: gameId,
+                                    phone: userfor.phone,
                                     telegramId: userId,
                                     platform: userState.data.platform,
                                     cardNumber: userState.data.card,
                                     amount: response.Summa,
-                                    operationId: response.OperationId,
+                                    operationId: response.operationId,
                                     success: response.Success,
                                     message: response.Message,
                                 };
@@ -1232,6 +1390,7 @@ bot.on('text', async (ctx) => {
 📤 Pul yechish so'rovi:
 🆔 User ID: ${payoutData.userId}
 🎮 Platform: ${payoutData.platform}
+📢 Tel: ${payoutData.phone}
 💳 Karta: ${payoutData.cardNumber}
 💰 Summa: ${payoutData.amount} UZS
 🆔 Telegram Id: ${payoutData.telegramId}
@@ -1246,14 +1405,14 @@ bot.on('text', async (ctx) => {
                     
                                 // Notify the user about the success or failure
                                 if (response.Success) {
-                                    await ctx.reply(`✅ So'rovingiz muvaffaqiyatli bajarildi!\n\nPul yechish miqdori: ${response.Summa} UZS`, mainKeyboard);
+                                    await ctx.reply(`Pul yechish miqdori: ${response.Summa} UZS`, mainKeyboard);
                                 } else {
                                     await ctx.reply(`❌ So'rov amalga oshirilmagani uchun uzr so'raymiz.`, mainKeyboard);
                                 }
                     
                                 // Reset user state to main menu after confirmation
                                 setState(userId, 'MAIN_MENU');
-                                await ctx.reply( mainKeyboard);
+                                
                             } catch (error) {
                                 console.error('Withdrawal confirmation error:', error);
                                 await ctx.reply('❌ Xatolik yuz berdi. Qaytadan urinib ko\'ring.', mainKeyboard);
