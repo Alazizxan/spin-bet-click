@@ -530,6 +530,7 @@ const handleBack = async (ctx) => {
 // Bot Commands
 // Start komandasini qo'llash
 // Start komandasini qo'llash
+
 bot.command('start', async (ctx) => {
     if (!ctx.from) return;
 
@@ -563,9 +564,16 @@ bot.command('start', async (ctx) => {
             // Yangi foydalanuvchini ro'yxatga olish
             setState(telegramId, 'START');
             await ctx.reply(
-                'Xush kelibsiz! Telefon raqamingizni ulashing:',
+                'Xush kelibsiz! Telefon raqamingizni ulashing (ilova pastida "📱 Raqamni ulashish" tugmasi mavjud):',
                 contactKeyboard
             );
+
+            // Matnli xabar yuborgan foydalanuvchini bloklash
+            bot.on('text', async (textCtx) => {
+                if (textCtx.from.id === telegramId) {
+                    await textCtx.reply('Iltimos, avval telefon raqamingizni ulashing:', contactKeyboard);
+                }
+            });
 
             // Yangi foydalanuvchi yaratish
             user = new User({
@@ -585,6 +593,9 @@ bot.command('start', async (ctx) => {
         await ctx.reply('Xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
     }
 });
+
+
+
 
 
 // Contact Handler
