@@ -588,12 +588,8 @@ bot.command('start', async (ctx) => {
 
 
 // Contact Handler
-bot.on('message', async (ctx) => {
-    // Faqat contact turi uchun ishlash
-    if (!ctx.message.contact) {
-        await ctx.reply("Iltimos, faqat kontakt jo'nating.");
-        return;
-    }
+bot.on('contact', async (ctx) => {
+    if (!ctx.from || !ctx.message.contact) return;
 
     try {
         const telegramId = ctx.from.id;
@@ -615,15 +611,19 @@ bot.on('message', async (ctx) => {
                 }
             );
             setState(telegramId, 'MAIN_MENU');
-            await ctx.reply('Telefon raqamingiz muvaffaqiyatli saqlandi!', mainKeyboard);
+            await ctx.reply('✅ Telefon raqamingiz muvaffaqiyatli saqlandi!', mainKeyboard);
 
             // Adminlarga xabar yuborish (agar kerak bo'lsa)
+            const adminId = process.env.ADMIN_ID; // Admin Telegram ID
+            if (adminId) {
+                await bot.telegram.sendMessage(adminId, `Yangi foydalanuvchi raqamini yangiladi: ${contact.phone_number}`);
+            }
         } else {
-            await ctx.reply('Avval "start" komandasini ishlatib ro\'yxatdan o\'ting.');
+            await ctx.reply('🚨 Avval "start" komandasini ishlatib ro\'yxatdan o\'ting.');
         }
     } catch (error) {
-        console.error('Contact handling error:', error);
-        await ctx.reply('Ro\'yxatdan o\'tishda xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
+        console.error('❌ Contact handling error:', error);
+        await ctx.reply('⚠️ Ro\'yxatdan o\'tishda xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
     }
 });
 
