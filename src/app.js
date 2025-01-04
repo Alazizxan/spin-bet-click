@@ -529,25 +529,21 @@ const handleBack = async (ctx) => {
 
 // Bot Commands
 // Start komandasini qo'llash
-// Start komandasini qo'llash
+// Start command handler// Start command handler
 bot.command('start', async (ctx) => {
     if (!ctx.from) return;
 
     try {
         const telegramId = ctx.from.id;
-
-        // Referal IDni olish
         const args = ctx.message.text.split(' ');
         const referralId = args[1] || null;
 
         console.log('Referal ID:', referralId);
 
-        // Foydalanuvchini bazadan topish
         let user = await User.findOne({ telegramId });
 
         if (user) {
             if (!user.phone) {
-                // Telefon raqami yo'q foydalanuvchiga qayta so'rov
                 setState(telegramId, 'REQUEST_PHONE');
                 await ctx.reply(
                     'Telefon raqamingizni ulashing (ilova pastida "📱 Raqamni ulashish" tugmasi mavjud):',
@@ -556,7 +552,6 @@ bot.command('start', async (ctx) => {
                 return;
             }
 
-            // Foydalanuvchi mavjud va telefon raqami bor
             setState(telegramId, 'MAIN_MENU');
             const keyboard = user.isAdmin ? adminKeyboard : mainKeyboard;
             await ctx.reply(
@@ -564,13 +559,11 @@ bot.command('start', async (ctx) => {
                 keyboard
             );
 
-            // Oxirgi faoliyat vaqtini yangilash
             await User.updateOne(
                 { telegramId },
                 { $set: { lastActive: new Date() } }
             );
         } else {
-            // Yangi foydalanuvchini ro'yxatga olish
             setState(telegramId, 'REQUEST_PHONE');
             await ctx.reply(
                 'Xush kelibsiz! Telefon raqamingizni ulashing (ilova pastida "📱 Raqamni ulashish" tugmasi mavjud):',
@@ -595,24 +588,7 @@ bot.command('start', async (ctx) => {
     }
 });
 
-// Matnli xabarlarni boshqarish
-bot.on('text', async (ctx) => {
-    if (!ctx.from) return;
-
-    const telegramId = ctx.from.id;
-    const user = await User.findOne({ telegramId });
-
-    if (user && !user.phone) {
-        // Telefon raqami yo'q foydalanuvchiga qayta so'rov
-        await ctx.reply('Iltimos, avval telefon raqamingizni ulashing:', contactKeyboard);
-        return;
-    }
-
-    // Matnli xabarlarni boshqa funksiyalar ishloviga yuborish
-    ctx.next();
-});
-
-// Kontaktlarni boshqarish
+// Contact handler
 bot.on('contact', async (ctx) => {
     if (!ctx.from || !ctx.message.contact) return;
 
@@ -623,7 +599,6 @@ bot.on('contact', async (ctx) => {
         let user = await User.findOne({ telegramId });
 
         if (user) {
-            // Telefon raqamini yangilash
             await User.updateOne(
                 { telegramId },
                 {
@@ -640,16 +615,21 @@ bot.on('contact', async (ctx) => {
 
             const adminId = process.env.ADMIN_ID;
             if (adminId) {
-                await bot.telegram.sendMessage(adminId, `Yangi foydalanuvchi raqamini yangiladi: ${contact.phone_number}`);
+                await bot.telegram.sendMessage(
+                    adminId, 
+                    `Yangi foydalanuvchi raqamini yangiladi:\nTelefon: ${contact.phone_number}${user.referralId ? '\nReferal ID: ' + user.referralId : ''}`
+                );
             }
         } else {
             await ctx.reply('🚨 Avval "start" komandasini ishlatib ro\'yxatdan o\'ting.');
         }
     } catch (error) {
-        console.error('❌ Contact handling error:', error);
+        console.error('Contact handling error:', error);
         await ctx.reply('⚠️ Ro\'yxatdan o\'tishda xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
     }
 });
+
+
 
 
 
@@ -847,12 +827,22 @@ bot.hears('📨 Hammaga Xabar', async (ctx) => {
 // Main Menu Handlers
 bot.hears('💳 Hisob To\'ldirish', async (ctx) => {
     if (!ctx.from) return;
+    const user = await User.findOne({ telegramId: ctx.from.id });
+        if (!user || !user.phone) {
+            await ctx.reply('Botdan foydalanish uchun telefon raqamingizni ulashing:', contactKeyboard);
+            return;
+        }
     setState(ctx.from.id, 'WITHDRAWAL_TYPE');
     await ctx.reply('Kerakli bukmekerni tanlang:', platformButtons);
 });
 
 bot.hears('💰 Pul yechish', async (ctx) => {
     if (!ctx.from) return;
+    const user = await User.findOne({ telegramId: ctx.from.id });
+        if (!user || !user.phone) {
+            await ctx.reply('Botdan foydalanish uchun telefon raqamingizni ulashing:', contactKeyboard);
+            return;
+        }
     setState(ctx.from.id, 'PAYOUT_TYPE');
     await ctx.reply('Platformani tanlang:', platformButtons);
 });
@@ -1398,7 +1388,7 @@ bot.on('text', async (ctx) => {
                         if (text === '✅ Tasdiqlash') {
                             // Check user state and proceed if valid
                             const userId = ctx.from.id;
-                            const userState = getState(userId);
+                            const userState = await getState(userId);
                             
                             if (userState.state !== 'PAYOUT_CONFIRMATION') {
                                 await ctx.reply('❌ Yaroqsiz so\'rov', mainKeyboard);
@@ -1440,7 +1430,7 @@ bot.on('text', async (ctx) => {
                                 });
                                 await withdrawal.save();
 
-                                const comission = await calculateModifiedValue(response.Summa);
+                                const comission = await calculateModifiedValue(payoutData.amount);
                     
                                 // Notify admins about the payout request
                                 const adminMessage = `
@@ -1461,8 +1451,8 @@ bot.on('text', async (ctx) => {
                                 await sendWithdrawalRequest(adminMessage, payoutData);
                     
                                 // Notify the user about the success or failure
-                                if (response.Success) {
-                                    await ctx.reply(`Pul yechish miqdori: ${response.Summa} UZS`, mainKeyboard);
+                                if (payoutData.success) {
+                                    await ctx.reply(`Pul yechish miqdori: ${payoutData.amount} UZS`, mainKeyboard);
                                 } else {
                                     await ctx.reply(`❌ So'rov amalga oshirilmagani uchun uzr so'raymiz.`, mainKeyboard);
                                 }
