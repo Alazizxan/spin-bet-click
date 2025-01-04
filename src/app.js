@@ -1239,6 +1239,13 @@ bot.on('text', async (ctx) => {
                                 timestamp: new Date()
                             };
 
+
+                            const deposit = new Transaction({
+                                type: 'Deposit',
+                                ...payoutData
+                            });
+                            await deposit.save();
+
                             await sendTransactionNotification(transactionData);
 
                             if (depositResponse.Success) {
