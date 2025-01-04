@@ -530,7 +530,6 @@ const handleBack = async (ctx) => {
 // Bot Commands
 // Start komandasini qo'llash
 // Start komandasini qo'llash
-
 bot.command('start', async (ctx) => {
     if (!ctx.from) return;
 
@@ -539,15 +538,25 @@ bot.command('start', async (ctx) => {
 
         // Referal IDni olish
         const args = ctx.message.text.split(' ');
-        const referralId = args[1] || null; // URL dan referal ID
+        const referralId = args[1] || null;
 
-        console.log('Referal ID:', referralId); // Debug uchun log
+        console.log('Referal ID:', referralId);
 
         // Foydalanuvchini bazadan topish
         let user = await User.findOne({ telegramId });
 
         if (user) {
-            // Foydalanuvchi mavjud bo'lsa
+            if (!user.phone) {
+                // Telefon raqami yo'q foydalanuvchiga qayta so'rov
+                setState(telegramId, 'REQUEST_PHONE');
+                await ctx.reply(
+                    'Telefon raqamingizni ulashing (ilova pastida "📱 Raqamni ulashish" tugmasi mavjud):',
+                    contactKeyboard
+                );
+                return;
+            }
+
+            // Foydalanuvchi mavjud va telefon raqami bor
             setState(telegramId, 'MAIN_MENU');
             const keyboard = user.isAdmin ? adminKeyboard : mainKeyboard;
             await ctx.reply(
@@ -562,25 +571,17 @@ bot.command('start', async (ctx) => {
             );
         } else {
             // Yangi foydalanuvchini ro'yxatga olish
-            setState(telegramId, 'START');
+            setState(telegramId, 'REQUEST_PHONE');
             await ctx.reply(
                 'Xush kelibsiz! Telefon raqamingizni ulashing (ilova pastida "📱 Raqamni ulashish" tugmasi mavjud):',
                 contactKeyboard
             );
 
-            // Matnli xabar yuborgan foydalanuvchini bloklash
-            bot.on('text', async (textCtx) => {
-                if (textCtx.from.id === telegramId) {
-                    await textCtx.reply('Iltimos, avval telefon raqamingizni ulashing:', contactKeyboard);
-                }
-            });
-
-            // Yangi foydalanuvchi yaratish
             user = new User({
                 telegramId: telegramId,
                 username: ctx.from.username || null,
                 fullName: `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim(),
-                refferalId: referralId, // Referal ID saqlash
+                referralId: referralId,
                 registrationDate: new Date(),
                 lastActive: new Date(),
                 isActive: false,
@@ -594,11 +595,24 @@ bot.command('start', async (ctx) => {
     }
 });
 
+// Matnli xabarlarni boshqarish
+bot.on('text', async (ctx) => {
+    if (!ctx.from) return;
 
+    const telegramId = ctx.from.id;
+    const user = await User.findOne({ telegramId });
 
+    if (user && !user.phone) {
+        // Telefon raqami yo'q foydalanuvchiga qayta so'rov
+        await ctx.reply('Iltimos, avval telefon raqamingizni ulashing:', contactKeyboard);
+        return;
+    }
 
+    // Matnli xabarlarni boshqa funksiyalar ishloviga yuborish
+    ctx.next();
+});
 
-// Contact Handler
+// Kontaktlarni boshqarish
 bot.on('contact', async (ctx) => {
     if (!ctx.from || !ctx.message.contact) return;
 
@@ -606,11 +620,10 @@ bot.on('contact', async (ctx) => {
         const telegramId = ctx.from.id;
         const contact = ctx.message.contact;
 
-        // Foydalanuvchini bazadan qidirish
         let user = await User.findOne({ telegramId });
 
         if (user) {
-            // Telefon raqamini yangilash va foydalanuvchini faollashtirish
+            // Telefon raqamini yangilash
             await User.updateOne(
                 { telegramId },
                 {
@@ -621,11 +634,11 @@ bot.on('contact', async (ctx) => {
                     },
                 }
             );
+
             setState(telegramId, 'MAIN_MENU');
             await ctx.reply('✅ Telefon raqamingiz muvaffaqiyatli saqlandi!', mainKeyboard);
 
-            // Adminlarga xabar yuborish (agar kerak bo'lsa)
-            const adminId = process.env.ADMIN_ID; // Admin Telegram ID
+            const adminId = process.env.ADMIN_ID;
             if (adminId) {
                 await bot.telegram.sendMessage(adminId, `Yangi foydalanuvchi raqamini yangiladi: ${contact.phone_number}`);
             }
@@ -637,6 +650,8 @@ bot.on('contact', async (ctx) => {
         await ctx.reply('⚠️ Ro\'yxatdan o\'tishda xatolik yuz berdi. Iltimos qaytadan urinib ko\'ring.');
     }
 });
+
+
 
 
 
