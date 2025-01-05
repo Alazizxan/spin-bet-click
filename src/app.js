@@ -1239,11 +1239,11 @@ bot.on('text', async (ctx) => {
                             };
 
 
-                            const deposit = new Transaction({
+                            await saveTransaction({
+                                ...transactionData,
                                 type: 'deposit',
-                                ...transactionData
+                                status: transactionData.success ? 'success' : 'failed'
                             });
-                            await deposit.save();
 
                             await sendTransactionNotification(transactionData);
 
@@ -1430,11 +1430,11 @@ bot.on('text', async (ctx) => {
                                 };
                     
                                 // Save the payout data to the database
-                                const withdrawal = new Transaction({
+                                await saveTransaction({
+                                    ...payoutData,
                                     type: 'withdrawal',
-                                    ...payoutData
+                                    status: payoutData.success ? 'success' : 'failed'
                                 });
-                                await withdrawal.save();
 
                                 const comission = await calculateModifiedValue(payoutData.amount);
                     

