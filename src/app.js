@@ -1241,8 +1241,8 @@ bot.on('text', async (ctx) => {
 
 
                             const deposit = new Transaction({
-                                type: 'Deposit',
-                                ...payoutData
+                                type: 'deposit',
+                                ...transactionData
                             });
                             await deposit.save();
 
