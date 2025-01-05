@@ -206,7 +206,6 @@ async function sendWithdrawalRequest(adminMessage, payoutData) {
         });
 
         // Foydalanuvchiga xabar yuborish
-        await bot.telegram.sendMessage(payoutData.telegramId, "Pul yechish so'rovi yuborildi. Admin tasdiqlashni kuting.");
     } catch (error) {
         console.error('Xatolik:', error);
     }
