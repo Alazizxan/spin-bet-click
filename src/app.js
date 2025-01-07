@@ -620,7 +620,7 @@ bot.on('contact', async (ctx) => {
                 );
             }
         } else {
-            await ctx.reply('🚨 Avval "start" komandasini ishlatib ro\'yxatdan o\'ting.');
+            await ctx.reply(`🚨 Avval \start komandasini ishlatib ro'yxatdan o'ting.`);
         }
     } catch (error) {
         console.error('Contact handling error:', error);
