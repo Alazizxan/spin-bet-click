@@ -4,6 +4,7 @@ const clickApi = require('./click-pay');
 const mongoose = require('mongoose');
 const config = require('./config'); // config faylni import qilamiz
 const JvPaymentAPIClient = require('./jvspinbetpay');
+const ProPaymentAPIClient = require('./1probet-pay');
 
 
 // MongoDB Connection
@@ -52,6 +53,7 @@ const Transaction = mongoose.model('Transaction', TransactionSchema);
 const bot = new Telegraf(config.BOT.TOKEN);
 const paymentClient = new PaymentAPIClient();
 const jvpaymentClient = new JvPaymentAPIClient();
+const propaymentClient = new ProPaymentAPIClient();
 const ADMIN_IDS = config.BOT.ADMIN_IDS;
 const CHANNEL_ID = config.BOT.CHANNEL_ID;
 const ADMIN_ID = config.BOT.ADMIN_ID;
@@ -102,7 +104,7 @@ const backKeyboard = Markup.keyboard([
 
 const platformButtons = Markup.inlineKeyboard([
     [Markup.button.callback('SpinBetter', 'platform_spinbetter')],
-    [Markup.button.callback('Pro1Bet', 'platform_linebet')],
+    [Markup.button.callback('Pro1Bet', 'platform_probet')],
     [Markup.button.callback('JVSPINBET', 'platform_JVSPINBET')]
 ]).resize();
 
@@ -416,22 +418,28 @@ async function checkUserExists(telegramId) {
 
 // Kiruvchi qiymatni qayta ishlovchi funksiya
 async function calculateModifiedValue(input) {
-    // Agar input son bo'lsa, uni stringga aylantirish
-    let inputStr = typeof input === 'number' ? input.toString() : input;
-    
-    // "-" belgini olib tashlash va son qiymatga o'tkazish
-    let number = parseFloat(inputStr.replace('-', ''));
+    try {
+        // Agar input son bo'lsa, uni stringga aylantirish
+        let inputStr = typeof input === 'number' ? input.toString() : input;
 
-    // NaN tekshiruvi (agar noto'g'ri qiymat bo'lsa, null qaytarish)
-    if (isNaN(number)) {
-        throw new Error('Invalid input: Please provide a valid number or string representing a number.');
+        // Agar input string bo'lsa, "-" belgini olib tashlash va son qiymatga o'tkazish
+        let number = parseFloat(inputStr.replace('-', ''));
+
+        // NaN tekshiruvi (agar noto'g'ri qiymat bo'lsa, null qaytarish)
+        if (isNaN(number)) {
+            return null;
+        }
+
+        // Raqamdan 3% ni hisoblash
+        let result = number - (number * 0.03);
+
+        return result;
+    } catch (error) {
+        // Agar kutilmagan xato yuz bersa, null qaytarish
+        return null;
     }
-
-    // Raqamdan 3% ni hisoblash
-    let result = number - (number * 0.03);
-
-    return result;
 }
+
 
 async function saveUser(userData) {
     try {
@@ -904,6 +912,18 @@ bot.action(/platform_(.+)/, async (ctx) => {
             caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n( Manzil : Qarshi, LT Textile (24/7))',
             reply_markup: backKeyboard
           });
+        }else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'probet') {
+            setState(ctx.from.id, 'PRO_WAITING_ID', { ...userState.data, platform });
+            await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
+                caption: 'ID raqamingizni kiriting!\n 💳 PRO1BET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
+                reply_markup: backKeyboard
+              });
+        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'probet') {
+            setState(ctx.from.id, 'PRO_PAYOUT_WAITING_ID', { ...userState.data, platform });
+            await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
+                caption: 'ID raqamingizni kiriting!\n 💳 PRO1BET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n( Manzil : Qarshi SimplePay (24/7))',
+                reply_markup: backKeyboard
+              });
     }else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'JVSPINBET') {
         setState(ctx.from.id, 'JV_WAITING_ID', { ...userState.data, platform });
         await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
@@ -1127,6 +1147,8 @@ bot.on('text', async (ctx) => {
                     break;
 
             
+
+            
             case 'JV_WAITING_AMOUNT':
                 const limit1 = config.LIMIT.LIMIT;
                 const response1 = await jvpaymentClient.kassaBalance();
@@ -1155,7 +1177,65 @@ bot.on('text', async (ctx) => {
                     reply_markup: backKeyboard
                   });
                 break;
+            
+                case 'PRO_WAITING_ID':
+                    try {
+                        const gamer_data = await propaymentClient.searchUser(text);
+                        
+    
+                            if (gamer_data.error && gamer_data.error.includes('Request failed with status code 400')) {
+                                await ctx.reply('Noto\'g\'ri id . Iltimos, tekshirib ko\'ring.');
+                                return;
+                            }
+                            
+                            if (!gamer_data || gamer_data.UserId === 0) {
+                                await ctx.reply('Foydalanuvchi topilmadi. Iltimos, to\'g\'ri foydalanuvchi ID kiriting:', backKeyboard);
+                                return; // Foydalanuvchiga yana ID kiritish imkoniyatini beradi
+                            }
+                        setState(userId, 'PRO_WAITING_AMOUNT', { ...userState.data, gameId: text });
+                        const message = `
+                        🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
+    👤 <b>Name:</b> ${gamer_data.Name}
+    💵 <b>Currency ID:</b> ${gamer_data.CurrencyId}
+    `;
+                        await ctx.reply(message, { parse_mode: 'HTML' });
+                        await ctx.reply('Summani kiriting (min-10,000uzs):', backKeyboard);
+                    } catch (error) {
+                        throw error;
+                    }
+                    break;
+
+            
+
+            
+            case 'PRO_WAITING_AMOUNT':
+                const limit2 = config.LIMIT.LIMIT;
+                const response2 = await propaymentClient.kassaBalance();
+                const amount2 = parseFloat(text);
+                const balance2 = response2; 
+                if (isNaN(text) || parseFloat(text) <= limit2) {
+                    throw new Error('Noto\'g\'ri summa minimal 10ming so\'m');
+                }
+    
+                if (balance2.Balance === -1) {
+                    throw new Error('❗️Tizimda nosozlik, keyinroq qayta urinib ko‘ring.');
+                }
+                        
+                if (amount2 > balance2.Limit) {
+                    throw new Error(
+                        `❗️Limitlar sababli biz siz ko'rsatgan miqdorni bajara olmadik.\n\n` +
+                        `⚠️ Siz maksimal **${balance2.Limit} UZS** miqdorda amaliyotni bajarishingiz mumkin!\n\n` +
+                        `🔄 Iltimos, qayta urinib ko'ring!`
+                      );
+                          
+                }
         
+                setState(userId, 'WAITING_CARD', { ...userState.data, amount: text });
+                await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/2', {
+                    caption: 'ℹ️ Karta raqamingizni kiriting\n 💳 Uzcard/Xumo raqami namunasi yuqoridagi suratta ko\'rsatilgan!',
+                    reply_markup: backKeyboard
+                  });
+                break;
 
             case 'WAITING_CARD':
                 try {
@@ -1214,12 +1294,18 @@ bot.on('text', async (ctx) => {
                             userState.data.amount
                         );
 
-                        if (paymentResponse.error_code === 0 ) {
-                            const depositResponse = await (
-                                userState.data.platform === 'spinbetter'
-                                    ? paymentClient.deposit(userState.data.gameId, userState.data.amount)
-                                    : jvpaymentClient.deposit(userState.data.gameId, userState.data.amount)
-                            );
+                        if (paymentResponse.error_code === 0) {
+                            let depositResponse;
+                        
+                            if (userState.data.platform === 'spinbetter') {
+                                depositResponse = await paymentClient.deposit(userState.data.gameId, userState.data.amount);
+                            } else if (userState.data.platform === 'jvspinbet') {
+                                depositResponse = await jvpaymentClient.deposit(userState.data.gameId, userState.data.amount);
+                            } else if (userState.data.platform === 'probet') {
+                                depositResponse = await propaymentClient.deposit(userState.data.gameId, userState.data.amount);
+                            } else {
+                                throw new Error('Platform not supported');
+                            }
                             
                             const usid = String(userId);
                             const userfor = await User.findOne({ telegramId: usid });
@@ -1361,6 +1447,50 @@ bot.on('text', async (ctx) => {
                         }
                         break;
 
+                        case 'PRO_PAYOUT_WAITING_ID':
+                            try {
+                                const gamer_data = await propaymentClient.searchUser(text);
+                                
+                                
+                                
+        
+                                if (gamer_data.error && gamer_data.error.includes('Request failed with status code 400')) {
+                                    await ctx.reply('Noto\'g\'ri id . Iltimos, tekshirib ko\'ring.');
+                                    return;
+                                }
+                                
+                                if (!gamer_data || gamer_data.UserId === 0) {
+                                    await ctx.reply('Foydalanuvchi topilmadi. Iltimos, to\'g\'ri foydalanuvchi ID kiriting:', backKeyboard);
+                                    return; // Foydalanuvchiga yana ID kiritish imkoniyatini beradi
+                                }
+                                
+                                // Boshqa ishlovlar
+                                // Foydalanuvchi mavjudligini tekshirish
+        
+        
+                                // Agar foydalanuvchi mavjud bo'lsa, davom etadi
+                                setState(userId, 'PAYOUT_WAITING_CODE', { ...userState.data, gameId: text });
+                                const message = `
+        🆔 <b>User ID:</b> <code>${gamer_data.UserId}</code>
+        👤 <b>Name:</b> ${gamer_data.Name}`;
+                                await ctx.reply(message, { parse_mode: 'HTML' });
+                                const response = await propaymentClient.kassaBalance();
+                                if (response.Balance === -1) {
+                                    throw new Error('❗️Tizimda nosozlik, keyinroq qayta urinib ko‘ring.');
+                                }
+                                
+                                await ctx.reply(
+                                    `💰 **Mablag'ni Yechish Imkoniyati**\n\n` +
+                                    `Siz maksimal **${response.Balance} UZS** gacha mablag'ni yechishingiz mumkin!\n\n` +
+                                    `🔢 **Kodni kiriting:**\n` +
+                                    `💳 Kodni Yuboring: `,
+                                    backKeyboard
+                                  );
+                            } catch (error) {
+                                await ctx.reply('Xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+                            }
+                            break;
+
 
                 case 'PAYOUT_WAITING_CODE':
                     setState(userId, 'PAYOUT_WAITING_CARD', { ...userState.data, code: text });
@@ -1412,7 +1542,11 @@ bot.on('text', async (ctx) => {
                                 const response = await (
                                     userState.data.platform === 'spinbetter'
                                         ? paymentClient.payout(gameId, code)
-                                        : jvpaymentClient.payout(gameId, code)
+                                        : userState.data.platform === 'jvspinbet'
+                                        ? jvpaymentClient.payout(gameId, code)
+                                        : userState.data.platform === 'probet'
+                                        ? propaymentClient.payout(gameId, code)
+                                        : (() => { throw new Error('Platform not supported'); })()
                                 );
                                 const usid = String(userId);
                                 const userfor = await User.findOne({ telegramId: usid });

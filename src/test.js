@@ -1,45 +1,36 @@
-const crypto = require('crypto'); // Hashlarni hisoblash uchun
-const axios = require('axios'); // HTTP so'rovlarni jo'natish uchun
+// URL manzilini belgilang
+const url = "https://www.mydevice.io/";  // O'zgartiring, haqiqiy URL
 
-// API uchun konfiguratsiya ma'lumotlari
-const config = {
-    hash: 'a2640a353b22fe063727d6aef8869fe5876630f5faccdaad42c40b1e5ac223d3', // API_KEY
-    cashierPass: 'TuAT5ef2',
-    cashdeskId: '1293755',
-    baseUrl: 'https://partners.servcul.com/CashdeskBotAPI'
-};
+const fetch = require('node-fetch'); // This will bring in the fetch API
 
-// Imzo hisoblash uchun yordamchi funksiyalar
-function sha256(data) {
-    return crypto.createHash('sha256').update(data).digest('hex');
-}
+const { JSDOM } = require('jsdom'); // Import JSDOM from jsdom package
+// URL of the resource
+ // Replace with the actual URL
 
-function md5(data) {
-    return crypto.createHash('md5').update(data).digest('hex');
-}
+// Custom User-Agent
+const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-// Balans olish funksiyasi
-async function getCashdeskBalance() {
-    const dt = new Date().toISOString().replace('T', ' ').slice(0, 19); // UTC format: yyyy.MM.dd HH:mm:ss
-    const confirm = md5(`${config.cashdeskId}:${config.hash}`);
-
-    // Sign hisoblash
-    const signPart1 = sha256(`hash=${config.hash}&cashierpass=${config.cashierPass}&dt=${dt}`);
-    const signPart2 = md5(`dt=${dt}&cashierpass=${config.cashierPass}&cashdeskid=${config.cashdeskId}`);
-    const sign = sha256(signPart1 + signPart2);
-
-    // API so'rovi URL
-    const url = `${config.baseUrl}/CashdeskBotAPI/Cashdesk/${config.cashdeskId}/Balance?confirm=${confirm}&dt=${dt}`;
-
-    try {
-        const response = await axios.get(url, {
-            headers: { sign }
-        });
-        console.log('Balans ma\'lumotlari:', response.data);
-    } catch (error) {
-        console.error('Xatolik yuz berdi:', error.response ? error.response.data : error.message);
-    }
-}
-
-// Balans olishni chaqirish
-getCashdeskBalance();
+// Fetch request with custom headers
+fetch(url, {
+  method: 'GET',  // or 'POST', depending on your needs
+  headers: {
+    'User-Agent': userAgent,  // Custom User-Agent header
+    'Accept': 'text/html',     // You can include other headers like 'Accept' for content types
+    'Accept-Encoding': 'gzip, deflate, br',
+    // Additional headers if required
+  }
+})
+  .then(response => response.text())  // Get response as text
+  .then(data => {
+    // Use JSDOM to parse the HTML response
+    const dom = new JSDOM(data);
+    
+    // Get the content of the <p> element with id="ua"
+    const uaText = dom.window.document.querySelector('p#ua').textContent;
+    
+    // Output the result
+    console.log("User-Agent:", uaText);
+  })
+  .catch(error => {
+    console.error("Error fetching the data:", error);
+  });

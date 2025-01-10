@@ -15,6 +15,9 @@ const config = {
         JVCASHDESK_PASSWORD: process.env.JVCASHDESK_PASSWORD,
         JVCASHDESK_ID: process.env.JVCASHDESK_ID,
         JVAPI_KEY: process.env.JVAPI_KEY,
+        ProCASHDESK_PASSWORD: process.env.ProCASHDESK_PASSWORD,
+        ProCASHDESK_ID: process.env.ProCASHDESK_ID,
+        ProAPI_KEY: process.env.ProAPI_KEY,
     },
     BOT: {
         TOKEN: process.env.BOT_TOKEN,
