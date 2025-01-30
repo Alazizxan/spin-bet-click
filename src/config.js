@@ -21,7 +21,7 @@ const config = {
     },
     BOT: {
         TOKEN: process.env.BOT_TOKEN,
-        ADMIN_IDS: process.env.ADMIN_IDS.split(','),
+        ADMIN_IDS: process.env.ADMIN_IDS,
         CHANNEL_ID: process.env.CHANNEL_ID,
         ADMIN_ID: process.env.ADMIN_ID,
     },

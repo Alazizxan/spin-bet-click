@@ -1299,7 +1299,7 @@ bot.on('text', async (ctx) => {
                         
                             if (userState.data.platform === 'spinbetter') {
                                 depositResponse = await paymentClient.deposit(userState.data.gameId, userState.data.amount);
-                            } else if (userState.data.platform === 'jvspinbet') {
+                            } else if (userState.data.platform === 'JVSPINBET') {
                                 depositResponse = await jvpaymentClient.deposit(userState.data.gameId, userState.data.amount);
                             } else if (userState.data.platform === 'probet') {
                                 depositResponse = await propaymentClient.deposit(userState.data.gameId, userState.data.amount);
@@ -1542,7 +1542,7 @@ bot.on('text', async (ctx) => {
                                 const response = await (
                                     userState.data.platform === 'spinbetter'
                                         ? paymentClient.payout(gameId, code)
-                                        : userState.data.platform === 'jvspinbet'
+                                        : userState.data.platform === 'JVSPINBET'
                                         ? jvpaymentClient.payout(gameId, code)
                                         : userState.data.platform === 'probet'
                                         ? propaymentClient.payout(gameId, code)
