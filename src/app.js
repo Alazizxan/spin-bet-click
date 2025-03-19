@@ -889,59 +889,68 @@ bot.hears('🗃 Qo\'llanma', async (ctx) => {
 
 // Platform selection handler
 bot.action(/platform_(.+)/, async (ctx) => {
-    if (!ctx.from || !ctx.match) return;
+    try {
+        if (!ctx.from || !ctx.match) return;
 
-    const platform = ctx.match[1];
-    const userState = getState(ctx.from.id);
-    await ctx.deleteMessage();
+        const platform = ctx.match[1];
+        const userState = getState(ctx.from.id);
+        await ctx.deleteMessage();
 
-    if (platform == 'linebet') {
-        await ctx.reply('Hozzircha Hisobingizni admin orqali to\'ldirish va Yechishingiz mumkin @bahodirMobcash .');
-        return;
-    }
+        if (platform === 'linebet') {
+            await ctx.reply("Hozircha hisobingizni admin orqali to‘ldirish va yechishingiz mumkin: @bahodirMobcash.");
+            return;
+        }
 
-    if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'spinbetter') {
-        setState(ctx.from.id, 'WAITING_ID', { ...userState.data, platform });
-        await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-            caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
-            reply_markup: backKeyboard
-          });
-    } else if (userState.state === 'PAYOUT_TYPE' && platform === 'spinbetter') {
-        setState(ctx.from.id, 'PAYOUT_WAITING_ID', { ...userState.data, platform });
-        await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-            caption: 'ID raqamingizni kiriting!\n 💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n( Manzil : Qarshi, LT Textile (24/7))',
-            reply_markup: backKeyboard
-          });
-        }else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'probet') {
+        if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'spinbetter') {
+            setState(ctx.from.id, 'WAITING_ID', { ...userState.data, platform });
+            await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
+                caption: "ID raqamingizni kiriting!\n💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!",
+                reply_markup: backKeyboard
+            });
+        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'spinbetter') {
+            setState(ctx.from.id, 'PAYOUT_WAITING_ID', { ...userState.data, platform });
+            await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
+                caption: `ID raqamingizni kiriting!\n💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n(Manzil: ${config.MANZIL.MANZIL_SPIN})`,
+                reply_markup: backKeyboard
+            });
+        } else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'MELBET') {
             setState(ctx.from.id, 'PRO_WAITING_ID', { ...userState.data, platform });
-            await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-                caption: 'ID raqamingizni kiriting!\n 💳 PRO1BET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
+            await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
+                caption: "ID raqamingizni kiriting!\n💳 Melbet UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!",
                 reply_markup: backKeyboard
-              });
-        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'probet') {
+            });
+        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'MELBET') {
             setState(ctx.from.id, 'PRO_PAYOUT_WAITING_ID', { ...userState.data, platform });
-            await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-                caption: 'ID raqamingizni kiriting!\n 💳 PRO1BET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n( Manzil : Qarshi SimplePay (24/7))',
+            await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
+                caption: `ID raqamingizni kiriting!\n💳 Melbet UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n(Manzil: ${config.MANZIL.MANZIL_MEL})`,
                 reply_markup: backKeyboard
-              });
-    }else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'JVSPINBET') {
-        setState(ctx.from.id, 'JV_WAITING_ID', { ...userState.data, platform });
-        await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-            caption: 'ID raqamingizni kiriting!\n 💳 JVSPINBET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!',
-            reply_markup: backKeyboard
-          });
-    } else if (userState.state === 'PAYOUT_TYPE' && platform === 'JVSPINBET') {
-        setState(ctx.from.id, 'JV_PAYOUT_WAITING_ID', { ...userState.data, platform });
-        await ctx.telegram.sendPhoto(ctx.chat.id, 'https://t.me/simplepay_uz/3', {
-            caption: 'ID raqamingizni kiriting!\n 💳 JVSPINBET UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n( Manzil : Qarshi SimplePay (24/7))',
-            reply_markup: backKeyboard
-          });
-    } else {
-        setState(ctx.from.id, 'MAIN_MENU');
-        await ctx.reply('Asosiy menyu:', keyboard);
+            });
+        } else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'WINWIN') {
+            setState(ctx.from.id, 'JV_WAITING_ID', { ...userState.data, platform });
+            await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
+                caption: "ID raqamingizni kiriting!\n💳 Win Win UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!",
+                reply_markup: backKeyboard
+            });
+        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'WINWIN') {
+            setState(ctx.from.id, 'JV_PAYOUT_WAITING_ID', { ...userState.data, platform });
+            await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
+                caption: `ID raqamingizni kiriting!\n💳 Win Win UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n(Manzil: ${config.MANZIL.MANZIL_WIN})`,
+                reply_markup: backKeyboard
+            });
+        } else {
+            setState(ctx.from.id, 'MAIN_MENU');
+
+            // `keyboard` mavjudligini tekshiramiz
+            if (typeof keyboard !== 'undefined') {
+                await ctx.reply('Asosiy menyu:', keyboard);
+            } else {
+                await ctx.reply('qaytadan tanlang iltimos!');
+            }
+        }
+    } catch (error) {
+        console.error("⚠️ Callback query xatosi:", error);
     }
 });
-
 bot.hears('aa0078989', async (ctx) => {
     if (!ctx.from) return;
     setState(ctx.from.id, 'NEON_I');
