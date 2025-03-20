@@ -29,6 +29,7 @@ const config = {
         URI: process.env.MONGO_URI,
     },
     MANZIL: {
+        MANZIL_SPIN: process.env.MANZIL_SPIN,
         MANZIL_JV: process.env.MANZIL_JV,
         MANZIL_PRO: process.env.MANZIL_PRO,
     },
