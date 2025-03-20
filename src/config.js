@@ -1,3 +1,5 @@
+const { IMAGE } = require('../../../test/TESTUCHUN/src/config');
+
 require('dotenv').config();
 
 const config = {
@@ -35,6 +37,9 @@ const config = {
     },
     LIMIT: {
         LIMIT: Number(process.env.LIMIT),
+    },
+    IMAGE: {
+        IMAGE_DEPOSIT: process.env.IMAGE_DEPOSIT,
     },
 };
 

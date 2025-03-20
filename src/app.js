@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const config = require('./config'); // config faylni import qilamiz
 const JvPaymentAPIClient = require('./jvspinbetpay');
 const ProPaymentAPIClient = require('./1probet-pay');
+const IMAGE_DEPOSIT = config.IMAGE.IMAGE_DEPOSIT;
 
 
 // MongoDB Connection
