@@ -28,6 +28,10 @@ const config = {
     DATABASE: {
         URI: process.env.MONGO_URI,
     },
+    MANZIL: {
+        MANZIL_JV: process.env.MANZIL_JV,
+        MANZIL_PRO: process.env.MANZIL_PRO,
+    },
     LIMIT: {
         LIMIT: Number(process.env.LIMIT),
     },

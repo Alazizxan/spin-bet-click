@@ -334,12 +334,11 @@ const notifyAdmins = async (message, errorLevel = 'info') => {
 
     const formattedMessage = `${emoji[errorLevel]} ${message}`;
 
-    for (const adminId of ADMIN_IDS) {
-        try {
-            await bot.telegram.sendMessage(adminId, formattedMessage);
-        } catch (error) {
-            console.error(`Failed to notify admin ${adminId}:`, error);
-        }
+    try {
+        await bot.telegram.sendMessage(ADMIN_ID, formattedMessage);
+        console.log(`Xabar muvaffaqiyatli yuborildi: ${ADMIN_ID}`);
+    } catch (error) {
+        console.error(`Failed to notify admin ${ADMIN_ID}:`, error);
     }
 };
 
@@ -913,28 +912,28 @@ bot.action(/platform_(.+)/, async (ctx) => {
                 caption: `ID raqamingizni kiriting!\n💳 SPINBETTER UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n(Manzil: ${config.MANZIL.MANZIL_SPIN})`,
                 reply_markup: backKeyboard
             });
-        } else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'MELBET') {
+        } else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'probet') {
             setState(ctx.from.id, 'PRO_WAITING_ID', { ...userState.data, platform });
             await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
-                caption: "ID raqamingizni kiriting!\n💳 Melbet UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!",
+                caption: "ID raqamingizni kiriting!\n💳 1ProBet UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!",
                 reply_markup: backKeyboard
             });
-        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'MELBET') {
+        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'probet') {
             setState(ctx.from.id, 'PRO_PAYOUT_WAITING_ID', { ...userState.data, platform });
             await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
-                caption: `ID raqamingizni kiriting!\n💳 Melbet UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n(Manzil: ${config.MANZIL.MANZIL_MEL})`,
+                caption: `ID raqamingizni kiriting!\n💳 1Probet UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n(Manzil: ${config.MANZIL.MANZIL_PRO})`,
                 reply_markup: backKeyboard
             });
-        } else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'WINWIN') {
+        } else if (userState.state === 'WITHDRAWAL_TYPE' && platform === 'JVSPINBET') {
             setState(ctx.from.id, 'JV_WAITING_ID', { ...userState.data, platform });
             await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
-                caption: "ID raqamingizni kiriting!\n💳 Win Win UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!",
+                caption: "ID raqamingizni kiriting!\n💳 JvSpinbet UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!",
                 reply_markup: backKeyboard
             });
-        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'WINWIN') {
+        } else if (userState.state === 'PAYOUT_TYPE' && platform === 'JVSPINBET') {
             setState(ctx.from.id, 'JV_PAYOUT_WAITING_ID', { ...userState.data, platform });
             await ctx.telegram.sendPhoto(ctx.chat.id, IMAGE_DEPOSIT, {
-                caption: `ID raqamingizni kiriting!\n💳 Win Win UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n(Manzil: ${config.MANZIL.MANZIL_WIN})`,
+                caption: `ID raqamingizni kiriting!\n💳 JvSpinbet UZS ID OLISH NAMUNA YUQORIDAGI SURATTA!\n(Manzil: ${config.MANZIL.MANZIL_JV})`,
                 reply_markup: backKeyboard
             });
         } else {
