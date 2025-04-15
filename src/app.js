@@ -1048,28 +1048,55 @@ bot.on('text', async (ctx) => {
 
                     
 
-            case 'ADMIN_BROADCAST':
-                if (user?.isAdmin) {
-                    const allUsers = await User.find({ isActive: true });
-                    let successCount = 0;
-                    let failCount = 0;
-
-                    for (const recipient of allUsers) {
-                        try {
-                            await bot.telegram.sendMessage(recipient.telegramId, text);
-                            successCount++;
-                        } catch (error) {
-                            failCount++;
+                    case 'ADMIN_BROADCAST':
+                        if (user?.isAdmin) {
+                            const message = ctx.message || ctx.update?.message;
+                            console.log("📷 KELGAN XABAR:", message); // DIAGNOSTIKA QISMI
+                    
+                            const text = message?.text;
+                            const photo = message?.photo?.[message.photo.length - 1]?.file_id;
+                            const caption = message?.caption || text || '📢 Yangi xabar!';
+                    
+                            if (!text && !photo) {
+                                await ctx.reply("❗️Iltimos, matn yoki rasm yuboring.");
+                                break;
+                            }
+                    
+                            const allUsers = await User.find({ isActive: true });
+                            let successCount = 0;
+                            let failCount = 0;
+                    
+                            for (const recipient of allUsers) {
+                                try {
+                                    if (photo) {
+                                        await bot.telegram.sendPhoto(recipient.telegramId, photo, {
+                                            caption: caption.slice(0, 1024)
+                                        });
+                                    } else {
+                                        await bot.telegram.sendMessage(recipient.telegramId, text);
+                                    }
+                                    successCount++;
+                                } catch (error) {
+                                    failCount++;
+                                    console.log(`❌ Yuborilmadi: ${recipient.telegramId} - ${error?.description || error.message}`);
+                                }
+                            }
+                    
+                            await ctx.reply(`
+                    📨 Xabar yuborish yakunlandi:
+                    ✅ Muvaffaqiyatli: ${successCount}
+                    ❌ Muvaffaqiyatsiz: ${failCount}
+                            `, keyboard);
+                    
+                            setState(userId, 'MAIN_MENU');
                         }
-                    }
-
-                    await ctx.reply(`
-📨 Xabar yuborish yakunlandi:
-✅ Muvaffaqiyatli: ${successCount}
-❌ Muvaffaqiyatsiz: ${failCount}`, keyboard);
-                    setState(userId, 'MAIN_MENU');
-                }
-                break;
+                        break;
+                    
+                    
+                    
+                    
+                    
+                    
 
             case 'WAITING_ID':
                 try {

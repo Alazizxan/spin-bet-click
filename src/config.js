@@ -1,4 +1,4 @@
-const { IMAGE } = require('../../../test/TESTUCHUN/src/config');
+
 
 require('dotenv').config();
 
